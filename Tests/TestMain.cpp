@@ -1,6 +1,6 @@
 // SONIC GRAIN headless tests: drive the processor with a fake host transport.
 // Run:  SonicGrainTests            -> unit tests (exit code 1 on failure)
-//       SonicGrainTests --snap [f]  -> render the editor to a PNG (default snap_sonic.png)
+//       SonicGrainTests --snap [f] [tab] -> render the editor to a PNG (default snap_sonic.png); tab 0-3 = LFO 1-4, 4 = METRO SEQ
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "SonicProcessor.h"
 #include "SonicEditor.h"
@@ -29,11 +29,11 @@ static void setP (juce::AudioProcessorValueTreeState& s, const char* id, float v
     p->setValueNotifyingHost (p->convertTo0to1 (v));
 }
 
-static void runSnap (const juce::String& path);
+static void runSnap (const juce::String& path, int deckTab = 0);
 
 int main (int argc, char** argv)
 {
-    if (argc > 1 && juce::String (argv[1]) == "--snap") { runSnap (argc > 2 ? juce::String (argv[2]) : juce::String ("snap_sonic.png")); return 0; }
+    if (argc > 1 && juce::String (argv[1]) == "--snap") { runSnap (argc > 2 ? juce::String (argv[2]) : juce::String ("snap_sonic.png"), argc > 3 ? juce::String (argv[3]).getIntValue() : 0); return 0; }
     juce::ScopedJuceInitialiser_GUI init;
     const double sr = 48000.0;
 
@@ -214,7 +214,7 @@ int main (int argc, char** argv)
 }
 
 // ---- editor snapshot (run with --snap): feeds a drum-like test signal, then renders the 1280x800 editor
-static void runSnap (const juce::String& path)
+static void runSnap (const juce::String& path, int deckTab)
 {
     juce::ScopedJuceInitialiser_GUI init;
     {
@@ -237,6 +237,7 @@ static void runSnap (const juce::String& path)
         std::unique_ptr<juce::AudioProcessorEditor> ed (gp.createEditor());
         if (auto* se = dynamic_cast<SonicEditor*> (ed.get()))
         {
+            se->showDeckTab (deckTab);
             se->updateModulationDisplay();
             for (int k = 0; k < 20; ++k) se->getScope().refresh();
         }

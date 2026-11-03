@@ -5,5 +5,6 @@ target_compile_definitions(SonicGrainTests PRIVATE
     IDM_NO_PLUGIN_ENTRY=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
     JucePlugin_Name="SonicGrainTests" JUCE_STANDALONE_APPLICATION=1)
 target_link_libraries(SonicGrainTests PRIVATE
+    SonicGrainFonts
     juce::juce_audio_processors juce::juce_gui_basics juce::juce_audio_basics juce::juce_dsp
     juce::juce_recommended_config_flags)

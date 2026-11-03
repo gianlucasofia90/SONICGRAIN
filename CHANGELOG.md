@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1] - 2026-11-03
+- Nuova grafica: pannelli in vetro su fondo blu, targhe nere inclinate, potenziometri scuri con arco giallo per il valore e valori in carattere pixel.
+- LFO 1–4 e METRO SEQ stanno in un'unica area a schede in basso (una pagina alla volta, con anteprima della forma su ogni scheda); la mod matrix resta sempre visibile a destra.
+- La modulazione dal vivo si vede ancora su potenziometri e barre: arco verde per l'escursione (giallo sull'area verde), tacca sul valore impostato.
+- Font incorporati: Rubik e Silkscreen (SIL Open Font License, in `Resources/fonts`).
+- Nessun cambiamento ai parametri: preset e sessioni salvate restano compatibili.
+
 ## [0.2.0] - 2026-11-03
 - LFO 3 e LFO 4, disponibili come sorgenti nella mod matrix. I quattro pannelli LFO stanno nella stessa finestra 1280×800; in modalità FREE il Rate è una barra invece di un potenziometro.
 - Potenziometri e valori numerici seguono la modulazione della matrice in tempo reale, con arco oro per l'escursione e tacca sul valore impostato. Il parametro non viene scritto.

@@ -13,10 +13,10 @@ Effetto audio granulare, glitch, tape e modulazione, in formato **VST3 / AU / AA
 - **Sync**: DAW (segue il playhead dell'host) o FREE (BPM interno 40–240).
 - **4 LFO**: 7 forme, sync a divisioni (8 bar … 1/16T) o 0.02–20 Hz.
 - **METRO SEQ**, ispirato a Intellijel Metropolix: 8 stadi con valore, pulse, ratchet, gate (MULTI / HOLD / SINGLE / REST), slide e probabilità. Direzioni Forward, Reverse, Pendulum, Random e Brownian.
-- **Mod matrix** a 8 slot: LFO 1–4, SEQ e SEQ Gate verso 25 destinazioni, amount ±100 %. Potenziometri e valori numerici delle destinazioni seguono la modulazione in tempo reale: l'arco oro mostra l'escursione, la tacca il valore impostato. Il parametro salvato non cambia e tenendo premuto il potenziometro si vede il valore impostato.
+- **Mod matrix** a 8 slot: LFO 1–4, SEQ e SEQ Gate verso 25 destinazioni, amount ±100 %. Potenziometri e valori numerici delle destinazioni seguono la modulazione in tempo reale: l'arco verde mostra l'escursione (giallo nell'area di modulazione), la tacca il valore impostato. Il parametro salvato non cambia e tenendo premuto il potenziometro si vede il valore impostato.
 - **Preset**: 8 di fabbrica (anche come program dell'host) più preset utente in `~/Music/Sonic Grain Presets/*.sgpreset`.
 
-Interfaccia 1280×800.
+Interfaccia 1280×800: pannelli in vetro, LFO e sequencer in un'area a schede, mod matrix sempre visibile. Font Rubik e Silkscreen (SIL Open Font License) incorporati da `Resources/fonts`.
 
 ## Download
 Ogni tag `v*` pubblica una [Release](../../releases) con:
@@ -62,7 +62,8 @@ Un tag `vX.Y.Z` crea la Release con gli zip e le note prese da `CHANGELOG.md`.
 | `Source/ModSources.h` | LFO e sequencer METRO |
 | `Source/Presets.h` | preset di fabbrica e preset utente |
 | `Source/SonicProcessor.*` | parametri, clock DAW/FREE, mod matrix, imager |
-| `Source/SonicUI.h`, `Source/SonicEditor.h` | look and feel, forma d'onda, scope LCR, layout |
+| `Source/SonicUI.h`, `Source/SonicEditor.h` | look and feel, forma d'onda, scope LCR, schede di modulazione, layout |
+| `Resources/fonts/` | font dell'interfaccia e relative licenze OFL |
 | `Source/IDMLookAndFeel.h` | helper per i parametri |
 | `Tests/` | test headless e snapshot dell'editor |
 

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(SonicGrain VERSION 0.2.0 LANGUAGES C CXX)
+project(SonicGrain VERSION 0.2.1 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -68,13 +68,21 @@ juce_add_plugin(SonicGrain
     AU_MAIN_TYPE kAudioUnitType_Effect
     AAX_CATEGORY AAX_ePlugInCategory_Delay)
 
+# Embedded UI fonts (Rubik, Silkscreen; SIL Open Font License, see Resources/fonts)
+juce_add_binary_data(SonicGrainFonts HEADER_NAME SonicFonts.h NAMESPACE SonicFonts SOURCES
+    Resources/fonts/Rubik-Medium.ttf
+    Resources/fonts/Rubik-Bold.ttf
+    Resources/fonts/Rubik-BlackItalic.ttf
+    Resources/fonts/Silkscreen-Regular.ttf)
+set_target_properties(SonicGrainFonts PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 target_sources(SonicGrain PRIVATE Source/SonicProcessor.cpp)
 target_include_directories(SonicGrain PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Source)
 target_compile_definitions(SonicGrain PUBLIC
     JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0
     SONICGRAIN_VERSION="${PROJECT_VERSION}")
 target_link_libraries(SonicGrain
-    PRIVATE juce::juce_audio_utils juce::juce_audio_processors juce::juce_gui_basics juce::juce_dsp
+    PRIVATE SonicGrainFonts juce::juce_audio_utils juce::juce_audio_processors juce::juce_gui_basics juce::juce_dsp
     PUBLIC juce::juce_recommended_config_flags juce::juce_recommended_lto_flags juce::juce_recommended_warning_flags)
 
 if(SONICGRAIN_BUILD_TESTS)
