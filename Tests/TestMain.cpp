@@ -1,6 +1,7 @@
 // SONIC GRAIN headless tests: drive the processor with a fake host transport.
 // Run:  SonicGrainTests            -> unit tests (exit code 1 on failure)
-//       SonicGrainTests --snap [f] [tab] -> render the editor to a PNG (default snap_sonic.png); tab 0-3 = LFO 1-4, 4 = METRO SEQ
+//       SonicGrainTests --snap [f] [tab] [scale] -> render the editor to a PNG (default snap_sonic.png);
+//                                               tab 0-3 = LFO 1-4, 4 = METRO SEQ; scale = pixel density (default 2)
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "SonicProcessor.h"
 #include "SonicEditor.h"
@@ -29,11 +30,12 @@ static void setP (juce::AudioProcessorValueTreeState& s, const char* id, float v
     p->setValueNotifyingHost (p->convertTo0to1 (v));
 }
 
-static void runSnap (const juce::String& path, int deckTab = 0);
+static void runSnap (const juce::String& path, int deckTab = 0, float scale = 2.0f);
 
 int main (int argc, char** argv)
 {
-    if (argc > 1 && juce::String (argv[1]) == "--snap") { runSnap (argc > 2 ? juce::String (argv[2]) : juce::String ("snap_sonic.png"), argc > 3 ? juce::String (argv[3]).getIntValue() : 0); return 0; }
+    if (argc > 1 && juce::String (argv[1]) == "--snap") { runSnap (argc > 2 ? juce::String (argv[2]) : juce::String ("snap_sonic.png"), argc > 3 ? juce::String (argv[3]).getIntValue() : 0,
+                                                                       argc > 4 ? juce::String (argv[4]).getFloatValue() : 2.0f); return 0; }
     juce::ScopedJuceInitialiser_GUI init;
     const double sr = 48000.0;
 
@@ -194,6 +196,21 @@ int main (int argc, char** argv)
         se->updateModulationDisplay();
         CHECK (! posCtl->slider.isModulationShown(), "knob released when its slot is switched off");
     }
+    {   // resizable editor: keeps 16:10, scales the whole view, remembers the size in the state
+        SonicProcessor gp;
+        std::unique_ptr<juce::AudioProcessorEditor> ed (gp.createEditor());
+        CHECK (ed->getWidth() == 1280 && ed->getHeight() == 800, "editor opens at 1280x800");
+        CHECK (ed->isResizable(), "editor is resizable");
+        ed->setSize (1600, 1000);
+        CHECK (ed->getWidth() == 1600 && ed->getHeight() == 1000, "editor resizes at 16:10");
+        CHECK ((int) gp.state.state.getProperty ("uiWidth") == 1600, "size stored with the state");
+        ed.reset (gp.createEditor());
+        CHECK (ed->getWidth() == 1600 && ed->getHeight() == 1000, "editor reopens at the stored size");
+        auto* se = dynamic_cast<SonicEditor*> (ed.get());
+        auto* knob = se->getControl ("gpos");
+        CHECK (knob != nullptr && knob->getBounds().getX() >= 16 && knob->getBoundsInParent().getRight() <= 916,
+               "controls laid out inside their panel");
+    }
     {   // a session saved before LFO 3/4 existed
         SonicProcessor gp;
         setP (gp.state, "m1_src", 3); setP (gp.state, "m1_dst", 22); setP (gp.state, "m1_amt", 55); setP (gp.state, "m2_src", 2);
@@ -214,7 +231,7 @@ int main (int argc, char** argv)
 }
 
 // ---- editor snapshot (run with --snap): feeds a drum-like test signal, then renders the 1280x800 editor
-static void runSnap (const juce::String& path, int deckTab)
+static void runSnap (const juce::String& path, int deckTab, float scale)
 {
     juce::ScopedJuceInitialiser_GUI init;
     {
@@ -241,7 +258,7 @@ static void runSnap (const juce::String& path, int deckTab)
             se->updateModulationDisplay();
             for (int k = 0; k < 20; ++k) se->getScope().refresh();
         }
-        auto img = ed->createComponentSnapshot (ed->getLocalBounds());
+        auto img = ed->createComponentSnapshot (ed->getLocalBounds(), true, scale);
         juce::File f (juce::File::getCurrentWorkingDirectory().getChildFile (path)); f.deleteFile();
         juce::FileOutputStream os (f); juce::PNGImageFormat().writeImageToStream (img, os);
         std::printf ("wrote %s\n", f.getFullPathName().toRawUTF8());

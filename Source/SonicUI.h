@@ -92,10 +92,10 @@ inline void glassPanel (juce::Graphics& g, juce::Rectangle<float> r, const juce:
 
     g.setColour (c::inkSoft);
     g.setFont (medium (10.0f, 0.3f));
-    g.drawText (kicker.toUpperCase(), (int) r.getX() + 16, (int) r.getY() + 8, 200, 12, juce::Justification::left);
+    g.drawText (kicker.toUpperCase(), (int) r.getX() + 16, (int) r.getY() + 12, 200, 12, juce::Justification::left);
     const auto f = bold (13.0f, 0.22f);
     const float tw = juce::GlyphArrangement::getStringWidth (f, title.toUpperCase()) + 36.0f;
-    auto tr = juce::Rectangle<float> (r.getX() + 18, r.getY() + 22, tw, 22);
+    auto tr = juce::Rectangle<float> (r.getX() + 16, r.getY() + 26, tw, 22);   // shadow ends 7 px lower, content starts at +56
     taggedPlate (g, tr, c::plate);
     g.setColour (c::onPlate);
     g.setFont (f);
@@ -471,6 +471,7 @@ public:
     }
 
     void setCaptionColour (juce::Colour col) { caption.setColour (juce::Label::textColourId, col); }
+    void setCaptionJustification (juce::Justification j) { caption.setJustificationType (j); }
 
     /** Shows the live value coming from the mod matrix (norm = 0..1 parameter position). */
     void setModulation (bool active, float norm)

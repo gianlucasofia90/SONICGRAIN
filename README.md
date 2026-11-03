@@ -5,7 +5,7 @@ Effetto audio granulare, glitch, tape e modulazione, in formato **VST3 / AU / AA
 ![SONIC GRAIN 0.2.1: pagina LFO 1](docs/screenshot.png)
 
 ## Interfaccia
-Dalla 0.2.1: pannelli in vetro su fondo blu, targhe nere inclinate, potenziometri scuri con arco giallo per il valore e valori in carattere pixel. In basso un'area a schede mostra una pagina alla volta (LFO 1–4 o METRO SEQ); la mod matrix resta sempre visibile a destra.
+Dalla 0.2.1: pannelli in vetro su fondo blu, targhe nere inclinate, potenziometri scuri con arco giallo per il valore e valori in carattere pixel. In basso un'area a schede mostra una pagina alla volta (LFO 1–4 o METRO SEQ); la mod matrix resta sempre visibile a destra. Dalla 0.2.2 la finestra si ridimensiona dall'angolo in basso a destra (da 800×500 a 2560×1600, sempre 16:10) e resta nitida a qualunque scala.
 
 | METRO SEQ | Mod matrix |
 |---|---|
@@ -27,7 +27,7 @@ Modulazione dal vivo: su Pitch la lancetta segue il valore modulato, l'arco verd
 - **Mod matrix** a 8 slot: LFO 1–4, SEQ e SEQ Gate verso 25 destinazioni, amount ±100 %. Potenziometri e valori numerici delle destinazioni seguono la modulazione in tempo reale: l'arco verde mostra l'escursione (giallo nell'area di modulazione), la tacca il valore impostato. Il parametro salvato non cambia e tenendo premuto il potenziometro si vede il valore impostato.
 - **Preset**: 8 di fabbrica (anche come program dell'host) più preset utente in `~/Music/Sonic Grain Presets/*.sgpreset`.
 
-Interfaccia 1280×800: pannelli in vetro, LFO e sequencer in un'area a schede, mod matrix sempre visibile. Font Rubik e Silkscreen (SIL Open Font License) incorporati da `Resources/fonts`.
+Interfaccia 16:10 ridimensionabile (1280×800 di base): pannelli in vetro, LFO e sequencer in un'area a schede, mod matrix sempre visibile. Font Rubik e Silkscreen (SIL Open Font License) incorporati da `Resources/fonts`.
 
 ## Download
 Ogni tag `v*` pubblica una [Release](../../releases) con:

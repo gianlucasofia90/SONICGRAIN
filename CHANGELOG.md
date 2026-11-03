@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2] - 2026-11-03
+- Finestra ridimensionabile dall'angolo in basso a destra o dall'host, da 800×500 a 2560×1600, sempre in 16:10. La dimensione scelta si salva con la sessione.
+- Interfaccia nitida a qualunque dimensione e scala dello schermo: tutto viene disegnato in vettoriale alla risoluzione reale, non più ingrandito come immagine.
+- Spaziature uniformi: 16 px dai bordi della finestra e dentro ogni pannello, 12 px tra i pannelli; i controlli sono distribuiti in celle uguali.
+- I testi di SYNC, BPM e OUTPUT ora stanno dentro le loro targhe; con SYNC su DAW la targa SYNC si accosta a OUTPUT.
+- Screenshot del README a doppia densità (`--snap file.png [pagina] [scala]`).
+
 ## [0.2.1] - 2026-11-03
 - Nuova grafica: pannelli in vetro su fondo blu, targhe nere inclinate, potenziometri scuri con arco giallo per il valore e valori in carattere pixel.
 - LFO 1–4 e METRO SEQ stanno in un'unica area a schede in basso (una pagina alla volta, con anteprima della forma su ogni scheda); la mod matrix resta sempre visibile a destra.

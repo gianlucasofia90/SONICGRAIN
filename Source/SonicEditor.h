@@ -2,15 +2,53 @@
 #include "SonicProcessor.h"
 #include "SonicUI.h"
 
-class SonicEditor : public juce::AudioProcessorEditor, private juce::Timer
+namespace sonic
+{
+/** Layout grid of the 1280x800 view: one margin, one gap, one panel padding everywhere. */
+namespace grid
+{
+    constexpr int W = 1280, H = 800;
+    constexpr int M = 16;          // window edge, and padding inside every panel and the deck
+    constexpr int G = 12;          // gap between panels
+    constexpr int HeaderH = 64;
+    constexpr int TitleH = 56;     // kicker + tagged section plate at the top of a panel
+    constexpr int KnobH = 86;      // knob + caption + value
+
+    const juce::Rectangle<int> grains  { M, HeaderH + G, 900, 272 };
+    const juce::Rectangle<int> imager  { grains.getRight() + G, grains.getY(), W - M - grains.getRight() - G, grains.getHeight() };
+    constexpr int row2Y = HeaderH + G + 272 + G, row2H = 158;
+    const juce::Rectangle<int> filter  { M, row2Y, 332, row2H };
+    const juce::Rectangle<int> glitch  { filter.getRight() + G, row2Y, 332, row2H };
+    const juce::Rectangle<int> colour  { glitch.getRight() + G, row2Y, W - M - glitch.getRight() - G, row2H };
+    constexpr int tabsY = row2Y + row2H + G, tabW = 170, tabH = 38;   // tab plates are 8 px smaller (shadow)
+    constexpr int deckY = tabsY + tabH + 6;
+    constexpr int matrixW = 364;
+    constexpr int matrixX = W - M - matrixW;
+    constexpr int deckLeftR = matrixX - 2 * M;                        // right edge of the page area
+
+    /** Inner content area of a panel (below its title). */
+    inline juce::Rectangle<int> content (juce::Rectangle<int> panel)
+    {
+        return panel.withTrimmedTop (TitleH).reduced (M, 0).withTrimmedBottom (M);
+    }
+    /** Cell i of n equal cells across r. */
+    inline juce::Rectangle<int> cell (juce::Rectangle<int> r, int i, int n)
+    {
+        const float w = (float) r.getWidth() / (float) n;
+        const int x0 = r.getX() + juce::roundToInt (w * (float) i), x1 = r.getX() + juce::roundToInt (w * (float) (i + 1));
+        return { x0, r.getY(), x1 - x0, r.getHeight() };
+    }
+}
+
+/** The whole interface, laid out on a fixed 1280x800 grid; the editor scales it to its size. */
+class SonicView : public juce::Component, private juce::Timer
 {
 public:
-    explicit SonicEditor (SonicProcessor& p) : AudioProcessorEditor (p), proc (p), wave (p), scope (p)
+    explicit SonicView (SonicProcessor& p) : proc (p), wave (p), scope (p)
     {
-        setLookAndFeel (&lnf);
-        using K = sonic::Control::Kind;
+        using K = Control::Kind;
         auto add = [this, &p] (const juce::String& id, const juce::String& label, K k) {
-            auto* ctl = controls.add (new sonic::Control (p.state, id, label, k));
+            auto* ctl = controls.add (new Control (p.state, id, label, k));
             if (addingDeck) ctl->getProperties().set ("sgDeck", true);
             addAndMakeVisible (ctl);
             byId.set (id, ctl);
@@ -19,10 +57,11 @@ public:
         // header
         for (auto* id : { "syncmode", "freebpm", "outdb" })
         {
-            auto* ctl = add (id, juce::String (id) == "syncmode" ? "SYNC" : (juce::String (id) == "freebpm" ? "BPM" : "OUTPUT"),
-                             juce::String (id) == "syncmode" ? K::Menu : K::Box);
+            const juce::String s (id);
+            auto* ctl = add (id, s == "syncmode" ? "SYNC" : (s == "freebpm" ? "BPM" : "OUTPUT"), s == "syncmode" ? K::Menu : K::Box);
             ctl->getProperties().set ("sgDark", true);
-            ctl->setCaptionColour (sonic::c::onPlate);
+            ctl->setCaptionColour (c::onPlate);
+            ctl->setCaptionJustification (juce::Justification::centred);
         }
         // grains
         for (auto pr : { std::pair<const char*, const char*> { "gpos", "Position" }, { "gsize", "Size" },
@@ -44,14 +83,14 @@ public:
         add ("rhold", "Hold", K::HBar);
         // LFOs (one at a time in the modulation deck)
         addingDeck = true;
-        for (int i = 1; i <= sonic::kNumLfos; ++i)
+        for (int i = 1; i <= kNumLfos; ++i)
         {
             const juce::String pre = "lfo" + juce::String (i) + "_";
             add (pre + "shape", "Shape", K::Menu);
             add (pre + "sync", "SYNC", K::Toggle);
             add (pre + "rate", "Rate", K::HBar);
             add (pre + "div", "Division", K::Menu);
-            addAndMakeVisible (lfoViews.add (new sonic::LfoView (p, i - 1)));
+            addAndMakeVisible (lfoViews.add (new LfoView (p, i - 1)));
         }
         // sequencer
         add ("seq_len", "Length", K::Box);
@@ -69,7 +108,7 @@ public:
             add (pre + "prob", {}, K::Box);
         }
         // mod matrix
-        for (int m = 1; m <= sonic::kNumSlots; ++m)
+        for (int m = 1; m <= kNumSlots; ++m)
         {
             const juce::String pre = "m" + juce::String (m) + "_";
             add (pre + "src", {}, K::Menu);
@@ -78,24 +117,24 @@ public:
         }
         // everything in the deck sits on the green ground
         for (auto* ctl : controls)
-            if (ctl->getProperties()["sgDeck"]) { ctl->getProperties().set ("sgDark", true); ctl->setCaptionColour (sonic::c::onPlate); }
+            if (ctl->getProperties()["sgDeck"]) { ctl->getProperties().set ("sgDark", true); ctl->setCaptionColour (c::onPlate); }
 
         addAndMakeVisible (wave);
         addAndMakeVisible (scope);
-        for (int d = 0; d < sonic::kNumDests; ++d) destControls[(size_t) d] = byId[sonic::kDestIds[d]];
+        for (int d = 0; d < kNumDests; ++d) destControls[(size_t) d] = byId[kDestIds[d]];
 
         // modulation deck tabs
         for (int t = 0; t < kNumTabs; ++t)
         {
-            auto* tab = tabs.add (new sonic::ModTab (t < sonic::kNumLfos ? "LFO " + juce::String (t + 1) : juce::String ("Metro Seq")));
-            if (t < sonic::kNumLfos)
+            auto* tab = tabs.add (new ModTab (t < kNumLfos ? "LFO " + juce::String (t + 1) : juce::String ("Metro Seq")));
+            if (t < kNumLfos)
                 tab->drawThumb = [this, t] (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour col) {
                     const int shape = (int) proc.state.getRawParameterValue ("lfo" + juce::String (t + 1) + "_shape")->load();
                     juce::Path path;
                     for (int i = 0; i <= 40; ++i)
                     {
-                        const float q = i / 40.0f;
-                        const juce::Point<float> pt (r.getX() + q * r.getWidth(), r.getCentreY() - 0.5f * r.getHeight() * sonic::lfoShapeValue (shape, q));
+                        const float q = (float) i / 40.0f;
+                        const juce::Point<float> pt (r.getX() + q * r.getWidth(), r.getCentreY() - 0.5f * r.getHeight() * lfoShapeValue (shape, q));
                         if (i == 0) path.startNewSubPath (pt); else path.lineTo (pt);
                     }
                     g.setColour (col);
@@ -107,11 +146,11 @@ public:
                     const float w = r.getWidth() / 8.0f;
                     for (int s = 0; s < 8; ++s)
                     {
-                        const float v = proc.state.getRawParameterValue ("s" + juce::String (s + 1) + "_val")->load();
-                        const float n = (float) proc.state.getParameter ("s" + juce::String (s + 1) + "_val")->convertTo0to1 (v);
-                        auto b = juce::Rectangle<float> (r.getX() + s * w + 1, r.getBottom() - juce::jmax (2.0f, n * r.getHeight()), w - 2, juce::jmax (2.0f, n * r.getHeight()));
-                        g.setColour (s == st ? sonic::c::signal : col);
-                        g.fillRect (b);
+                        auto* prm = proc.state.getParameter ("s" + juce::String (s + 1) + "_val");
+                        const float n = prm != nullptr ? prm->getValue() : 0.5f;
+                        const float h = juce::jmax (2.0f, n * r.getHeight());
+                        g.setColour (s == st ? c::signal : col);
+                        g.fillRect (r.getX() + (float) s * w + 1, r.getBottom() - h, w - 2, h);
                     }
                 };
             tab->onClick = [this] { updateVisibility(); repaint(); };
@@ -144,71 +183,75 @@ public:
             }), true);
         };
 
-        // the controls were built before they had a parent: rebuild their text boxes with this look and feel
-        sendLookAndFeelChange();
-        setSize (1280, 800);
+        setSize (grid::W, grid::H);
         startTimerHz (kDisplayHz);
     }
-    ~SonicEditor() override { setLookAndFeel (nullptr); }
 
     void paint (juce::Graphics& g) override
     {
-        using namespace sonic;
-        const float W = (float) getWidth();
+        using namespace grid;
         // ground, checkerboard on the lower half, orbit rings
         g.fillAll (c::ground);
         g.setColour (c::checker);
-        for (int y = 352; y < kDeckY; y += 32)
-            for (int x = ((y / 32) % 2) * 32; x < getWidth(); x += 64)
-                g.fillRect (x, y, 32, juce::jmin (32, kDeckY - y));
+        for (int y = 352; y < deckY; y += 32)
+            for (int x = ((y / 32) % 2) * 32; x < W; x += 64)
+                g.fillRect (x, y, 32, juce::jmin (32, deckY - y));
         g.setColour (c::orbitB); g.drawEllipse (930 - 470, 430 - 470, 940, 940, 10.0f);
         g.setColour (c::orbitA); g.drawEllipse (930 - 370, 430 - 370, 740, 740, 10.0f);
         g.fillEllipse (668 - 22, 168 - 22, 44, 44);
 
-        // header strip, wordmark, plates behind the global controls
+        // header strip, wordmark, plates behind the preset menu and the global controls
         g.setColour (c::groundAlt);
-        g.fillRect (0.0f, 0.0f, W, 64.0f);
+        g.fillRect (0, 0, W, HeaderH);
         g.setFont (black (38.0f, -0.01f));
         const juce::String name ("SONIC GRAIN");
-        g.setColour (c::go);      g.drawText (name, 21, 10, 330, 44, juce::Justification::centredLeft);
-        g.setColour (c::signal);  g.drawText (name, 19, 8, 330, 44, juce::Justification::centredLeft);
-        g.setColour (c::onPlate); g.drawText (name, 16, 5, 330, 44, juce::Justification::centredLeft);
-        taggedPlate (g, { 446, 14, 296, 34 }, c::tag);
+        const juce::Rectangle<int> wm (M, 0, 300, HeaderH);
+        g.setColour (c::go);      g.drawText (name, wm.translated (5, 5), juce::Justification::centredLeft);
+        g.setColour (c::signal);  g.drawText (name, wm.translated (3, 3), juce::Justification::centredLeft);
+        g.setColour (c::onPlate); g.drawText (name, wm, juce::Justification::centredLeft);
+        taggedPlate (g, presetPlate.toFloat(), c::tag);
         for (auto* id : { "syncmode", "freebpm", "outdb" })
             if (auto* ctl = byId[id]; ctl != nullptr && ctl->isVisible())
             {
-                auto b = ctl->getBounds().toFloat().expanded (14, 4);
+                auto b = headerPlate (ctl->getBounds()).toFloat();
                 g.setColour (juce::Colour (0x59000000)); g.fillPath (platePath (b), juce::AffineTransform::translation (3, 3));
                 g.setColour (c::plate); g.fillPath (platePath (b));
             }
 
-        glassPanel (g, { 16, 76, 900, 284 }, "Grain", "Cloud");
-        glassPanel (g, { 928, 76, 336, 284 }, "Stereo", "Imager");
-        glassPanel (g, { 16, 372, 330, 140 }, "Tone", "Filter");
-        glassPanel (g, { 358, 372, 330, 140 }, "Time", "Glitch");
-        glassPanel (g, { 700, 372, 564, 140 }, "Tape", "Colour");
+        glassPanel (g, grains.toFloat(), "Grain", "Cloud");
+        glassPanel (g, imager.toFloat(), "Stereo", "Imager");
+        glassPanel (g, filter.toFloat(), "Tone", "Filter");
+        glassPanel (g, glitch.toFloat(), "Time", "Glitch");
+        glassPanel (g, colour.toFloat(), "Tape", "Colour");
+
+        // the matrix has no tab: its tag sits on the tab row, above its column
+        {
+            const auto f = black (12.0f, 0.04f);
+            auto r = juce::Rectangle<float> ((float) matrixX, (float) tabsY, (float) tabW - 8, (float) tabH - 8);
+            taggedPlate (g, r, c::plate);
+            g.setColour (c::onPlate); g.setFont (f);
+            g.drawText ("MOD MATRIX", r, juce::Justification::centred, false);
+        }
 
         // modulation deck
         g.setColour (c::modGround);
-        g.fillRect (0, kDeckY, getWidth(), getHeight() - kDeckY);
+        g.fillRect (0, deckY, W, H - deckY);
         g.setColour (c::onPlate.withAlpha (0.18f));
-        g.fillRect (kMatrixX - 16, kDeckY + 12, 1, getHeight() - kDeckY - 24);
+        g.fillRect (matrixX - M, deckY + M, 1, H - deckY - 2 * M);
         g.setFont (bold (10.0f, 0.06f));
-        g.setColour (c::onPlate);
-        g.drawText ("MOD MATRIX", kMatrixX, kDeckY + 10, 120, 12, juce::Justification::left);
         g.setColour (c::onPlate.withAlpha (0.8f));
-        g.drawText ("SOURCE", kMatrixX, kDeckY + 26, 80, 12, juce::Justification::left);
-        g.drawText ("DESTINATION", kMatrixX + 96, kDeckY + 26, 110, 12, juce::Justification::left);
-        g.drawText ("AMOUNT", kMatrixX + 228, kDeckY + 26, 80, 12, juce::Justification::left);
+        g.drawText ("SOURCE", matrixX, deckY + M, 90, 14, juce::Justification::left);
+        g.drawText ("DESTINATION", matrixX + 96, deckY + M, 124, 14, juce::Justification::left);
+        g.drawText ("AMOUNT", matrixX + 226, deckY + M, 138, 14, juce::Justification::left);
 
-        if (activeTab() == sonic::kNumLfos)
+        if (activeTab() == kNumLfos)
         {   // sequencer row labels + playhead
             const char* rows[6] = { "VAL", "PLS", "RAT", "GATE", "SLD", "PRB" };
-            const int ry[6] = { 624, 692, 712, 733, 756, 776 };
-            g.setColour (c::onPlate.withAlpha (0.8f));
-            for (int i = 0; i < 6; ++i) g.drawText (rows[i], kSeqX - 46, ry[i], 40, 14, juce::Justification::left);
+            for (int i = 0; i < 6; ++i)
+                g.drawText (rows[i], kSeqLabelX, seqRow (i).getY(), 40, seqRow (i).getHeight(),
+                            i == 0 ? juce::Justification::topLeft : juce::Justification::centredLeft);
             const int st = proc.ui.seqStage.load();
-            auto col = juce::Rectangle<float> ((float) (kSeqX - 4 + st * kSeqStep), 612.0f, (float) kSeqStep - 4, 182.0f);
+            auto col = seqStage (st).toFloat().withY ((float) deckY + M - 4).withBottom ((float) H - M + 4).expanded (4, 0);
             g.setColour (c::signal.withAlpha (0.22f));
             g.fillRoundedRectangle (col, 5.0f);
             g.setColour (proc.ui.seqGate.load() > 0.5f ? c::signal : c::onPlate.withAlpha (0.5f));
@@ -218,75 +261,112 @@ public:
 
     void resized() override
     {
-        auto at = [this] (const juce::String& id, int x, int y, int w, int h) { if (auto* c = byId[id]) c->setBounds (x, y, w, h); };
-        // header
-        prevBtn.setBounds (404, 16, 40, 30);
-        presetBox.setBounds (474, 20, 236, 22);
-        nextBtn.setBounds (744, 16, 40, 30);
-        saveBtn.setBounds (790, 16, 76, 30);
-        delBtn.setBounds (866, 16, 64, 30);
-        at ("syncmode", 968, 12, 80, 38);
-        at ("freebpm", 1070, 12, 72, 38);
-        at ("outdb", 1170, 12, 90, 38);
+        using namespace grid;
+        auto at = [this] (const juce::String& id, juce::Rectangle<int> r) { if (auto* c = byId[id]) c->setBounds (r); };
+        // header: everything centred on the strip
+        const int cy = HeaderH / 2;
+        prevBtn.setBounds (300, cy - 15, 40, 30);
+        presetPlate = { 348, cy - 17, 270, 34 };
+        presetBox.setBounds (presetPlate.getX() + 24, cy - 11, presetPlate.getWidth() - 48, 22);
+        nextBtn.setBounds (presetPlate.getRight() + 10, cy - 15, 40, 30);
+        saveBtn.setBounds (nextBtn.getRight() + 6, cy - 15, 76, 30);
+        delBtn.setBounds (saveBtn.getRight() + 2, cy - 15, 64, 30);
+        // right-aligned plates, 8 px apart; each control sits clear of its plate's slanted edges
+        int right = W - M;
+        for (auto [id, w] : { std::pair<const char*, int> { "outdb", 84 }, { "freebpm", 64 }, { "syncmode", 80 } })
+        {
+            if (juce::String (id) == "freebpm" && ! freeBpmShown) continue;   // SYNC moves next to OUTPUT
+            auto r = juce::Rectangle<int> (0, cy - 17, w, 34);
+            r.setX (right - headerPlate (r).getWidth() + (r.getX() - headerPlate (r).getX()));
+            at (id, r);
+            right = headerPlate (r).getX() - 8;
+        }
         // grains
-        wave.setBounds (32, 132, 868, 122);
-        at ("freeze", 784, 92, 118, 30);
+        auto gc = content (grains);
+        wave.setBounds (gc.removeFromTop (gc.getHeight() - KnobH - 8));
+        gc.removeFromTop (8);
         const char* g[11] = { "gpos", "gsize", "gdens", "gpitch", "spray", "prand", "grev", "gshape", "gwidth", "feedback", "cloud" };
-        for (int i = 0; i < 11; ++i) at (g[i], 30 + i * 79, 260, 78, 94);
+        for (int i = 0; i < 11; ++i) at (g[i], cell (gc, i, 11));
+        at ("freeze", { grains.getRight() - M - 118, grains.getY() + 22, 118, 30 });
         // imager
-        scope.setBounds (940, 132, 312, 136);
-        at ("imgwidth", 990, 270, 90, 86);
-        at ("monofreq", 1112, 270, 90, 86);
-        // filter / glitch / colour
+        auto ic = content (imager);
+        scope.setBounds (ic.removeFromTop (ic.getHeight() - KnobH - 8));
+        ic.removeFromTop (8);
+        at ("imgwidth", cell (ic, 0, 2));
+        at ("monofreq", cell (ic, 1, 2));
+        // filter / glitch / colour: 86 px cells across each panel
+        auto fc = content (filter);
         const char* f[4] = { "hpf", "hpq", "lpf", "lreso" };
-        for (int i = 0; i < 4; ++i) at (f[i], 26 + i * 78, 422, 76, 86);
-        at ("glitch", 366, 422, 76, 86);
-        at ("slice", 452, 436, 70, 40);
-        at ("rptpitch", 528, 422, 76, 86);
-        at ("rhold", 612, 436, 66, 36);
+        for (int i = 0; i < 4; ++i) at (f[i], cell (fc, i, 4));
+        auto xc = content (glitch);
+        at ("glitch", cell (xc, 0, 4));
+        // menu and bar sit with their field on the knobs' centre line (29 px down), caption above
+        at ("slice", cell (xc, 1, 4).reduced (6, 0).withHeight (38).translated (0, 2));
+        at ("rptpitch", cell (xc, 2, 4));
+        at ("rhold", cell (xc, 3, 4).reduced (6, 0).withHeight (34).translated (0, 4));
+        auto cc = content (colour);
         const char* co[7] = { "crbits", "dsamp", "tone", "wow", "flutter", "drive", "drywet" };
-        for (int i = 0; i < 7; ++i) at (co[i], 710 + i * 79, 422, 78, 86);
+        for (int i = 0; i < 7; ++i) at (co[i], cell (cc, i, 7));
         // deck tabs
-        for (int t = 0; t < kNumTabs; ++t) tabs[t]->setBounds (16 + t * 164, 524, 170, 38);
-        // LFOs (same place, one shown)
-        for (int i = 0; i < sonic::kNumLfos; ++i)
+        for (int t = 0; t < kNumTabs; ++t) tabs[t]->setBounds (M + t * tabW, tabsY, tabW, tabH);
+        // deck pages: inner area of the deck, left of the matrix
+        const juce::Rectangle<int> page (M, deckY + M, deckLeftR - M, H - deckY - 2 * M);
+        for (int i = 0; i < kNumLfos; ++i)
         {
             const juce::String pre = "lfo" + juce::String (i + 1) + "_";
-            lfoViews[i]->setBounds (24, kDeckY + 14, 440, 210);
-            at (pre + "shape", 488, kDeckY + 16, 200, 40);
-            at (pre + "div", 488, kDeckY + 68, 200, 40);
-            at (pre + "rate", 488, kDeckY + 68, 200, 38);
-            at (pre + "sync", 488, kDeckY + 122, 120, 32);
+            auto r = page;
+            lfoViews[i]->setBounds (r.removeFromLeft (r.getWidth() - 252 - M));
+            r.removeFromLeft (M);
+            at (pre + "shape", r.removeFromTop (40));
+            r.removeFromTop (10);
+            const auto second = r.removeFromTop (40);
+            at (pre + "div", second);
+            at (pre + "rate", second.withHeight (36));
+            r.removeFromTop (12);
+            at (pre + "sync", r.removeFromTop (30).withWidth (124));
         }
-        // sequencer
-        at ("seq_len", 24, kDeckY + 14, 70, 34);
-        at ("seq_dir", 24, kDeckY + 58, 130, 40);
-        at ("seq_div", 24, kDeckY + 108, 130, 40);
-        at ("seq_slide", 24, kDeckY + 158, 130, 34);
+        {
+            auto r = page.withWidth (140);
+            at ("seq_len", r.removeFromTop (34).withWidth (72)); r.removeFromTop (8);
+            at ("seq_dir", r.removeFromTop (40)); r.removeFromTop (8);
+            at ("seq_div", r.removeFromTop (40)); r.removeFromTop (8);
+            at ("seq_slide", r.removeFromTop (34));
+        }
         for (int s = 0; s < 8; ++s)
         {
-            const int x = kSeqX + s * kSeqStep;
+            const auto x = seqStage (s);
             const juce::String pre = "s" + juce::String (s + 1) + "_";
-            at (pre + "val", x, 616, kSeqStep - 12, 66);
-            at (pre + "pulses", x, 690, kSeqStep - 12, 17);
-            at (pre + "ratch", x, 710, kSeqStep - 12, 17);
-            at (pre + "gate", x - 2, 730, kSeqStep - 8, 20);
-            at (pre + "slide", x + 4, 753, kSeqStep - 18, 18);
-            at (pre + "prob", x, 774, kSeqStep - 12, 16);
+            const char* ids[6] = { "val", "pulses", "ratch", "gate", "slide", "prob" };
+            for (int row = 0; row < 6; ++row)
+            {
+                auto r = seqRow (row).withX (x.getX()).withWidth (x.getWidth());
+                if (row == 4) r = r.reduced (8, 0);
+                at (pre + ids[row], r);
+            }
         }
         // matrix
-        for (int m = 0; m < sonic::kNumSlots; ++m)
+        for (int m = 0; m < kNumSlots; ++m)
         {
-            const int y = kDeckY + 42 + m * 24;
+            const int y = deckY + M + 20 + m * 22;
             const juce::String pre = "m" + juce::String (m + 1) + "_";
-            at (pre + "src", kMatrixX, y, 90, 21);
-            at (pre + "dst", kMatrixX + 96, y, 124, 21);
-            at (pre + "amt", kMatrixX + 228, y + 1, 128, 19);
+            at (pre + "src", { matrixX, y, 90, 20 });
+            at (pre + "dst", { matrixX + 96, y, 124, 20 });
+            at (pre + "amt", { matrixX + 226, y + 1, matrixW - 226, 18 });
         }
         updateVisibility();
     }
 
-    sonic::PolarScope& getScope() { return scope; }
+    PolarScope& getScope() { return scope; }
+
+    /** Menus on plates and on the deck get light text (the look and feel's default is ink, for glass). */
+    void applyDarkColours()
+    {
+        for (auto* ctl : controls)
+            if (ctl->getProperties()["sgDark"]) ctl->combo.setColour (juce::ComboBox::textColourId, c::onPlate);
+        presetBox.setColour (juce::ComboBox::textColourId, c::onPlate);
+    }
+    Control* getControl (const juce::String& id) { return byId[id]; }
+
     /** Shows one page of the modulation deck: 0..3 = LFO 1..4, 4 = METRO SEQ. */
     void showDeckTab (int t)
     {
@@ -294,7 +374,6 @@ public:
         updateVisibility();
         repaint();
     }
-    sonic::Control* getControl (const juce::String& id) { return byId[id]; }
 
     /** Moves the knobs of the matrix destinations to their live values. */
     void updateModulationDisplay()
@@ -304,14 +383,37 @@ public:
         lastBlockCount = count;
         // no audio coming through (bypassed or stopped host): show the real values
         const juce::uint32 mask = idleFrames < kDisplayHz / 2 ? proc.ui.modMask.load() : 0;
-        for (int d = 0; d < sonic::kNumDests; ++d)
+        for (int d = 0; d < kNumDests; ++d)
             if (auto* ctl = destControls[(size_t) d])
                 ctl->setModulation (((mask >> d) & 1u) != 0, proc.ui.modNorm[(size_t) d].load (std::memory_order_relaxed));
     }
 
 private:
-    static constexpr int kDisplayHz = 30, kNumTabs = sonic::kNumLfos + 1;
-    static constexpr int kDeckY = 568, kMatrixX = 900, kSeqX = 228, kSeqStep = 78;
+    static constexpr int kDisplayHz = 30, kNumTabs = kNumLfos + 1;
+    static constexpr int kSeqLabelX = grid::M + 140 + grid::M;   // after the sequencer's settings column
+    static constexpr int kSeqX = kSeqLabelX + 44;
+
+    /** A header plate: the control's box widened so the slanted edges clear it on both sides. */
+    static juce::Rectangle<int> headerPlate (juce::Rectangle<int> ctl)
+    {
+        const int h = ctl.getHeight() + 10, lean = juce::roundToInt ((float) h * 0.577f);
+        return ctl.expanded (lean + 6, 5);
+    }
+
+    /** Column of sequencer stage s, spread evenly between the row labels and the page edge. */
+    static juce::Rectangle<int> seqStage (int s)
+    {
+        const auto area = juce::Rectangle<int> (kSeqX, 0, grid::deckLeftR - kSeqX, 1);
+        return grid::cell (area, s, 8).reduced (5, 0);
+    }
+    /** Row r of the sequencer grid (VAL, PLS, RAT, GATE, SLD, PRB), filling the deck's inner height. */
+    static juce::Rectangle<int> seqRow (int r)
+    {
+        static const int h[6] = { 82, 18, 18, 20, 18, 18 };
+        int y = grid::deckY + grid::M;
+        for (int i = 0; i < r; ++i) y += h[i] + 4;
+        return { 0, y, 1, h[r] };
+    }
 
     int activeTab() const
     {
@@ -329,9 +431,13 @@ private:
     void updateVisibility()
     {
         auto v = [this] (const char* id) { return proc.state.getRawParameterValue (id)->load() > 0.5f; };
-        if (auto* c = byId["freebpm"]) c->setVisible (v ("syncmode"));
+        if (auto* c = byId["freebpm"])
+        {
+            c->setVisible (v ("syncmode"));
+            if (freeBpmShown != c->isVisible()) { freeBpmShown = c->isVisible(); resized(); repaint(); }
+        }
         const int tab = activeTab();
-        for (int i = 1; i <= sonic::kNumLfos; ++i)
+        for (int i = 1; i <= kNumLfos; ++i)
         {
             const juce::String pre = "lfo" + juce::String (i) + "_";
             const bool shown = tab == i - 1;
@@ -341,7 +447,7 @@ private:
             if (auto* c = byId[pre + "rate"]) c->setVisible (shown && ! sync);
             if (auto* c = byId[pre + "div"]) c->setVisible (shown && sync);
         }
-        const bool seqShown = tab == sonic::kNumLfos;
+        const bool seqShown = tab == kNumLfos;
         for (auto* id : { "seq_len", "seq_dir", "seq_div", "seq_slide" }) if (auto* c = byId[id]) c->setVisible (seqShown);
         for (int s = 1; s <= 8; ++s)
             for (auto* id : { "val", "pulses", "ratch", "gate", "slide", "prob" })
@@ -354,24 +460,72 @@ private:
         if (++slowTick < kDisplayHz / 10) return;
         slowTick = 0;
         updateVisibility();
-        repaint (0, kDeckY, getWidth(), getHeight() - kDeckY);
-        repaint (940, 0, 340, 64);
+        repaint (0, grid::deckY, grid::W, grid::H - grid::deckY);
+        repaint (700, 0, grid::W - 700, grid::HeaderH);
         if (presetBox.getSelectedItemIndex() != proc.presets.getCurrent()) refreshPresets();
     }
 
     SonicProcessor& proc;
-    sonic::LookAndFeel lnf;
-    sonic::WaveformView wave;
-    sonic::PolarScope scope;
-    juce::OwnedArray<sonic::LfoView> lfoViews;
-    juce::OwnedArray<sonic::ModTab> tabs;
+    WaveformView wave;
+    PolarScope scope;
+    juce::OwnedArray<LfoView> lfoViews;
+    juce::OwnedArray<ModTab> tabs;
     juce::TextButton prevBtn, nextBtn, saveBtn, delBtn;
     juce::ComboBox presetBox;
-    juce::OwnedArray<sonic::Control> controls;
-    juce::HashMap<juce::String, sonic::Control*> byId;
-    std::array<sonic::Control*, sonic::kNumDests> destControls {};
+    juce::Rectangle<int> presetPlate;
+    juce::OwnedArray<Control> controls;
+    juce::HashMap<juce::String, Control*> byId;
+    std::array<Control*, kNumDests> destControls {};
     juce::uint32 lastBlockCount = 0;
     int idleFrames = 0, slowTick = 0;
-    bool addingDeck = false;
+    bool addingDeck = false, freeBpmShown = false;
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SonicView)
+};
+} // namespace sonic
+
+/** Resizable editor: the 1280x800 view is scaled as a whole (vector drawing, so it stays sharp at any size and
+    DPI) and the window keeps the 16:10 proportions. The last size is stored with the plugin state. */
+class SonicEditor : public juce::AudioProcessorEditor
+{
+public:
+    explicit SonicEditor (SonicProcessor& p) : AudioProcessorEditor (p), proc (p), view (p)
+    {
+        setLookAndFeel (&lnf);
+        addAndMakeVisible (view);
+        // the controls were built before they had a parent: rebuild their text boxes with this look and feel
+        view.sendLookAndFeelChange();
+        view.applyDarkColours();
+
+        setResizable (true, true);
+        setResizeLimits (kMinW, kMinW * sonic::grid::H / sonic::grid::W, kMaxW, kMaxW * sonic::grid::H / sonic::grid::W);
+        if (auto* cons = getConstrainer()) cons->setFixedAspectRatio ((double) sonic::grid::W / (double) sonic::grid::H);
+        const int w = juce::jlimit (kMinW, kMaxW, (int) proc.state.state.getProperty (kSizeKey, sonic::grid::W));
+        setSize (w, w * sonic::grid::H / sonic::grid::W);
+        ready = true;   // from now on a new size is the user's choice: remember it
+    }
+    ~SonicEditor() override { setLookAndFeel (nullptr); }
+
+    void paint (juce::Graphics& g) override { g.fillAll (sonic::c::ground); }
+
+    void resized() override
+    {
+        const float scale = (float) getWidth() / (float) sonic::grid::W;
+        view.setTransform (juce::AffineTransform::scale (scale));
+        if (ready && getWidth() != (int) proc.state.state.getProperty (kSizeKey, sonic::grid::W))
+            proc.state.state.setProperty (kSizeKey, getWidth(), nullptr);
+    }
+
+    sonic::PolarScope& getScope() { return view.getScope(); }
+    sonic::Control* getControl (const juce::String& id) { return view.getControl (id); }
+    void showDeckTab (int t) { view.showDeckTab (t); }
+    void updateModulationDisplay() { view.updateModulationDisplay(); }
+
+private:
+    static constexpr int kMinW = 800, kMaxW = 2560;
+    static inline const juce::Identifier kSizeKey { "uiWidth" };
+    SonicProcessor& proc;
+    sonic::LookAndFeel lnf;
+    sonic::SonicView view;
+    bool ready = false;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SonicEditor)
 };
