@@ -2,10 +2,21 @@
 
 Effetto audio granulare, glitch, tape e modulazione, in formato **VST3 / AU / AAX** (C++ / JUCE 8).
 
-![SONIC GRAIN](docs/screenshot.png)
+![SONIC GRAIN 0.2.1: pagina LFO 1](docs/screenshot.png)
+
+## Interfaccia
+Dalla 0.2.1: pannelli in vetro su fondo blu, targhe nere inclinate, potenziometri scuri con arco giallo per il valore e valori in carattere pixel. In basso un'area a schede mostra una pagina alla volta (LFO 1–4 o METRO SEQ); la mod matrix resta sempre visibile a destra.
+
+| METRO SEQ | Mod matrix |
+|---|---|
+| ![Pagina METRO SEQ](docs/screenshot-seq.png) | ![Mod matrix a 8 slot](docs/detail-matrix.png) |
+
+![Modulazione dal vivo sui potenziometri](docs/detail-knobs.png)
+
+Modulazione dal vivo: su Pitch la lancetta segue il valore modulato, l'arco verde mostra l'escursione e la tacca scura il valore impostato.
 
 ## Funzioni
-- **Grains**: granulatore live sugli ultimi 4 s con forma d'onda. La finestra rossa/oro mostra Position/Size, l'oro lo Spray, i punti bianchi i grani attivi. Freeze, Density, Pitch, Pitch Rnd, Reverse, Shape, Spread, Feedback, Cloud.
+- **Grains**: granulatore live sugli ultimi 4 s con forma d'onda. La finestra gialla mostra Position/Size, la zona gialla tenue lo Spray, i punti bianchi i grani attivi. Freeze, Density, Pitch, Pitch Rnd, Reverse, Shape, Spread, Feedback, Cloud.
 - **Glitch**: repeat a tempo (Slice 1/4 a 1/64), Rpt Pitch, Hold.
 - **Filter**: HPF 20 Hz – 2 kHz + Q, LPF 200 Hz – 20 kHz + Reso (SVF 12 dB/oct).
 - **Colour**: Bits, Downsample, Tone, Wow, Flutter, Drive, Dry/Wet, Output.
