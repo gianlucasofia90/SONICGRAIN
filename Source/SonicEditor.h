@@ -46,6 +46,16 @@ class SonicView : public juce::Component, private juce::Timer
 public:
     explicit SonicView (SonicProcessor& p) : proc (p), wave (p), scope (p)
     {
+        // the static artwork lives in one cached layer, so an animated control never redraws it
+        backdrop.draw = [this] (juce::Graphics& g) { paintBackdrop (g); };
+        backdrop.setInterceptsMouseClicks (false, false);
+        backdrop.setOpaque (true);
+        backdrop.setBufferedToImage (true);
+        addAndMakeVisible (backdrop);
+        playhead.draw = [this] (juce::Graphics& g) { paintPlayhead (g); };
+        playhead.setInterceptsMouseClicks (false, false);
+        addChildComponent (playhead);
+
         using K = Control::Kind;
         auto add = [this, &p] (const juce::String& id, const juce::String& label, K k) {
             auto* ctl = controls.add (new Control (p.state, id, label, k));
@@ -128,6 +138,8 @@ public:
         {
             auto* tab = tabs.add (new ModTab (t < kNumLfos ? "LFO " + juce::String (t + 1) : juce::String ("Metro Seq")));
             if (t < kNumLfos)
+            {
+                tab->thumbState = [this, t] { return (int) proc.state.getRawParameterValue ("lfo" + juce::String (t + 1) + "_shape")->load(); };
                 tab->drawThumb = [this, t] (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour col) {
                     const int shape = (int) proc.state.getRawParameterValue ("lfo" + juce::String (t + 1) + "_shape")->load();
                     juce::Path path;
@@ -140,7 +152,16 @@ public:
                     g.setColour (col);
                     g.strokePath (path, juce::PathStrokeType (1.5f));
                 };
+            }
             else
+            {
+                tab->thumbState = [this] {
+                    int h = proc.ui.seqStage.load();
+                    for (int s = 1; s <= 8; ++s)
+                        if (auto* prm = proc.state.getParameter ("s" + juce::String (s) + "_val"))
+                            h = h * 31 + juce::roundToInt (prm->getValue() * 64.0f);
+                    return h;
+                };
                 tab->drawThumb = [this] (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour col) {
                     const int st = proc.ui.seqStage.load();
                     const float w = r.getWidth() / 8.0f;
@@ -153,7 +174,8 @@ public:
                         g.fillRect (r.getX() + (float) s * w + 1, r.getBottom() - h, w - 2, h);
                     }
                 };
-            tab->onClick = [this] { updateVisibility(); repaint(); };
+            }
+            tab->onClick = [this] { updateVisibility(); updatePlayhead(); backdrop.repaint(); };
             addAndMakeVisible (tab);
         }
         tabs[0]->setToggleState (true, juce::dontSendNotification);
@@ -187,7 +209,7 @@ public:
         startTimerHz (kDisplayHz);
     }
 
-    void paint (juce::Graphics& g) override
+    void paintBackdrop (juce::Graphics& g)
     {
         using namespace grid;
         // ground, checkerboard on the lower half, orbit rings
@@ -250,18 +272,37 @@ public:
             for (int i = 0; i < 6; ++i)
                 g.drawText (rows[i], kSeqLabelX, seqRow (i).getY(), 40, seqRow (i).getHeight(),
                             i == 0 ? juce::Justification::topLeft : juce::Justification::centredLeft);
-            const int st = proc.ui.seqStage.load();
-            auto col = seqStage (st).toFloat().withY ((float) deckY + M - 4).withBottom ((float) H - M + 4).expanded (4, 0);
-            g.setColour (c::signal.withAlpha (0.22f));
-            g.fillRoundedRectangle (col, 5.0f);
-            g.setColour (proc.ui.seqGate.load() > 0.5f ? c::signal : c::onPlate.withAlpha (0.5f));
-            g.drawRoundedRectangle (col, 5.0f, 2.0f);
         }
+    }
+
+    void paintPlayhead (juce::Graphics& g)
+    {
+        const auto col = playhead.getLocalBounds().toFloat().reduced (2.0f);
+        g.setColour (c::signal.withAlpha (0.22f));
+        g.fillRoundedRectangle (col, 5.0f);
+        g.setColour (shownGate ? c::signal : c::onPlate.withAlpha (0.5f));
+        g.drawRoundedRectangle (col, 5.0f, 2.0f);
+    }
+
+    /** Moves the sequencer playhead when it has something new to show. */
+    void updatePlayhead()
+    {
+        using namespace grid;
+        const bool shown = activeTab() == kNumLfos;
+        playhead.setVisible (shown);
+        if (! shown) return;
+        const int st = proc.ui.seqStage.load();
+        const bool gate = proc.ui.seqGate.load() > 0.5f;
+        if (st == shownStage && gate == shownGate) return;
+        shownStage = st; shownGate = gate;
+        playhead.setBounds (seqStage (st).withY (deckY + M - 4).withBottom (H - M + 4).expanded (6, 2));
+        playhead.repaint();
     }
 
     void resized() override
     {
         using namespace grid;
+        backdrop.setBounds (getLocalBounds());
         auto at = [this] (const juce::String& id, juce::Rectangle<int> r) { if (auto* c = byId[id]) c->setBounds (r); };
         // header: everything centred on the strip
         const int cy = HeaderH / 2;
@@ -372,7 +413,8 @@ public:
     {
         if (auto* tab = tabs[juce::jlimit (0, kNumTabs - 1, t)]) tab->setToggleState (true, juce::dontSendNotification);
         updateVisibility();
-        repaint();
+        updatePlayhead();
+        backdrop.repaint();
     }
 
     /** Moves the knobs of the matrix destinations to their live values. */
@@ -434,7 +476,7 @@ private:
         if (auto* c = byId["freebpm"])
         {
             c->setVisible (v ("syncmode"));
-            if (freeBpmShown != c->isVisible()) { freeBpmShown = c->isVisible(); resized(); repaint(); }
+            if (freeBpmShown != c->isVisible()) { freeBpmShown = c->isVisible(); resized(); backdrop.repaint(); }
         }
         const int tab = activeTab();
         for (int i = 1; i <= kNumLfos; ++i)
@@ -460,12 +502,21 @@ private:
         if (++slowTick < kDisplayHz / 10) return;
         slowTick = 0;
         updateVisibility();
-        repaint (0, grid::deckY, grid::W, grid::H - grid::deckY);
-        repaint (700, 0, grid::W - 700, grid::HeaderH);
+        updatePlayhead();
         if (presetBox.getSelectedItemIndex() != proc.presets.getCurrent()) refreshPresets();
     }
 
+    /** A child that draws through its owner: one for the cached artwork, one for the playhead. */
+    struct Layer : juce::Component
+    {
+        std::function<void (juce::Graphics&)> draw;
+        void paint (juce::Graphics& g) override { draw (g); }
+    };
+
     SonicProcessor& proc;
+    Layer backdrop, playhead;
+    int shownStage = -1;
+    bool shownGate = false;
     WaveformView wave;
     PolarScope scope;
     juce::OwnedArray<LfoView> lfoViews;

@@ -130,7 +130,7 @@ public:
     void setModulation (bool active, double value)
     {
         const bool show = active && ! isMouseButtonDown();
-        if (show == modShown && (! show || value == modValue)) return;
+        if (show == modShown && (! show || std::abs (valueToProportionOfLength (value) - valueToProportionOfLength (modValue)) < 0.002)) return;
         modShown = show;
         modValue = value;
         repaint();
@@ -389,6 +389,7 @@ public:
     Control (juce::AudioProcessorValueTreeState& s, const juce::String& id, const juce::String& label, Kind k)
         : kind (k), paramId (id)
     {
+        setBufferedToImage (true);   // the window often repaints around a control that has not changed
         caption.setText (label.toUpperCase(), juce::dontSendNotification);
         caption.setJustificationType (k == Kind::Knob ? juce::Justification::centred : juce::Justification::centredLeft);
         caption.setFont (bold (11.0f, 0.06f));
@@ -582,8 +583,15 @@ public:
     }
 
 private:
-    void timerCallback() override { repaint(); }
+    void timerCallback() override
+    {
+        const auto count = proc.ui.blockCount.load (std::memory_order_relaxed);
+        if (count == lastBlockCount) return;   // nothing new from the audio thread
+        lastBlockCount = count;
+        repaint();
+    }
     SonicProcessor& proc;
+    juce::uint32 lastBlockCount = 0;
 };
 
 /** LCR spectroscope: polar half-circle, angle = stereo position (L..C..R) per frequency band,
@@ -596,7 +604,7 @@ public:
         startTimerHz (30);
     }
 
-    void refresh() { timerCallback(); }
+    void refresh() { lastBlockCount = proc.ui.blockCount.load() - 1; timerCallback(); }
 
     void paint (juce::Graphics& g) override
     {
@@ -644,6 +652,9 @@ private:
 
     void timerCallback() override
     {
+        const auto count = proc.ui.blockCount.load (std::memory_order_relaxed);
+        if (count == lastBlockCount) return;
+        lastBlockCount = count;
         std::array<float, kN> l {}, rr {};
         proc.copyScope (l.data(), rr.data(), kN);
         std::array<float, kN * 2> fl {}, fr {};
@@ -681,6 +692,7 @@ private:
     juce::dsp::FFT fft;
     juce::dsp::WindowingFunction<float> window;
     std::vector<Dot> dots;
+    juce::uint32 lastBlockCount = 0;
     struct Sm { float pan = 0, level = 0; };
     std::array<Sm, 96> smooth {};
 };
@@ -723,6 +735,7 @@ class ModTab : public juce::Button, private juce::Timer
 {
 public:
     std::function<void (juce::Graphics&, juce::Rectangle<float>, juce::Colour)> drawThumb;
+    std::function<int()> thumbState;   // changes when the drawing has to change
 
     explicit ModTab (const juce::String& name) : juce::Button (name)
     {
@@ -750,6 +763,11 @@ public:
     }
 
 private:
-    void timerCallback() override { repaint(); }
+    void timerCallback() override
+    {
+        const int now = thumbState ? thumbState() : 0;
+        if (now != shownState) { shownState = now; repaint(); }
+    }
+    int shownState = -1;
 };
 } // namespace sonic
