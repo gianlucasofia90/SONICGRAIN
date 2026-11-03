@@ -151,4 +151,9 @@ jobs:
         run: |
           awk -v v="${GITHUB_REF_NAME#v}" '$0 ~ "^## \\[?"v {f=1; next} /^## /{if(f) exit} f' CHANGELOG.md > notes.md
           [ -s notes.md ] || echo "SONIC GRAIN $GITHUB_REF_NAME" > notes.md
-          gh release create "$GITHUB_REF_NAME" dist/*.zip --title "SONIC GRAIN $GITHUB_REF_NAME" --notes-file notes.md --verify-tag
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            # release already created from the GitHub web page: just attach the builds
+            gh release upload "$GITHUB_REF_NAME" dist/*.zip --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/*.zip --title "SONIC GRAIN $GITHUB_REF_NAME" --notes-file notes.md --verify-tag
+          fi
