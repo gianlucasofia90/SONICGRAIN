@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.3] - 2026-11-03
+- macOS: nuovo installer `.pkg` con VST3 e AU. Basta approvare il pacchetto una volta, e i plugin installati non restano bloccati da Gatekeeper.
+- macOS: corretta la versione minima del sistema: le build ora partono da macOS 11, come previsto.
+- La CI verifica firma ad hoc, versione minima e installer a ogni build.
+
 ## [0.2.2] - 2026-11-03
 - Finestra ridimensionabile dall'angolo in basso a destra o dall'host, da 800×500 a 2560×1600, sempre in 16:10. La dimensione scelta si salva con la sessione.
 - Interfaccia nitida a qualunque dimensione e scala dello schermo: tutto viene disegnato in vettoriale alla risoluzione reale, non più ingrandito come immagine.
