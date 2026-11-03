@@ -37,6 +37,39 @@ inline void outlinedText (juce::Graphics& g, const juce::String& t, juce::Rectan
     g.fillPath (p);
 }
 
+/** Slider that can show a live modulated value without touching its own value (the parameter stays where
+    the user left it). While the user holds the control it shows the real value, so it can be set precisely. */
+class ModSlider : public juce::Slider
+{
+public:
+    void setModulation (bool active, double value)
+    {
+        const bool show = active && ! isMouseButtonDown();
+        if (show == modShown && (! show || value == modValue)) return;
+        modShown = show;
+        modValue = value;
+        repaint();
+        if (! isEditingText()) updateText();
+    }
+
+    bool isModulationShown() const { return modShown; }
+    double getModulatedValue() const { return modValue; }
+
+    juce::String getTextFromValue (double v) override { return juce::Slider::getTextFromValue (modShown ? modValue : v); }
+
+private:
+    bool isEditingText() const
+    {
+        for (auto* child : getChildren())
+            if (auto* l = dynamic_cast<juce::Label*> (child))
+                if (l->isBeingEdited()) return true;
+        return false;
+    }
+
+    bool modShown = false;
+    double modValue = 0.0;
+};
+
 class LookAndFeel : public juce::LookAndFeel_V4
 {
 public:
@@ -72,7 +105,7 @@ public:
     juce::Font getLabelFont (juce::Label& l) override { return l.getFont(); }
 
     void drawRotarySlider (juce::Graphics& g, int x, int y, int w, int h, float pos, float a0, float a1,
-                           juce::Slider&) override
+                           juce::Slider& s) override
     {
         auto r = juce::Rectangle<float> ((float) x, (float) y, (float) w, (float) h).reduced (2.0f);
         const float size = juce::jmin (r.getWidth(), r.getHeight());
@@ -84,10 +117,26 @@ public:
         track.addCentredArc (ctr.x, ctr.y, rad - 3, rad - 3, 0, a0, a1, true);
         g.setColour (c::skyLt);
         g.strokePath (track, juce::PathStrokeType (5.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-        const float ang = a0 + pos * (a1 - a0);
-        val.addCentredArc (ctr.x, ctr.y, rad - 3, rad - 3, 0, a0, ang, true);
+        // under modulation the pointer and the ring follow the live value; the gold arc shows the distance from
+        // the set value, marked by a tick
+        const float baseAng = a0 + pos * (a1 - a0);
+        float ang = baseAng;
+        auto* ms = dynamic_cast<ModSlider*> (&s);
+        const bool modulated = ms != nullptr && ms->isModulationShown();
+        if (modulated) ang = a0 + (float) s.valueToProportionOfLength (ms->getModulatedValue()) * (a1 - a0);
+        val.addCentredArc (ctr.x, ctr.y, rad - 3, rad - 3, 0, a0, juce::jmin (ang, baseAng), true);
         g.setColour (c::royal);
         g.strokePath (val, juce::PathStrokeType (5.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        if (modulated)
+        {
+            juce::Path depth;
+            depth.addCentredArc (ctr.x, ctr.y, rad - 3, rad - 3, 0, juce::jmin (ang, baseAng), juce::jmax (ang, baseAng), true);
+            g.setColour (c::gold);
+            g.strokePath (depth, juce::PathStrokeType (5.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            g.setColour (c::ink);
+            g.drawLine (ctr.x + (rad - 7) * std::sin (baseAng), ctr.y - (rad - 7) * std::cos (baseAng),
+                        ctr.x + (rad + 1) * std::sin (baseAng), ctr.y - (rad + 1) * std::cos (baseAng), 2.0f);
+        }
         // face
         const float fr = rad - 9;
         g.setColour (c::ink.withAlpha (0.25f));
@@ -244,7 +293,13 @@ public:
 
     void setCaptionColour (juce::Colour col) { caption.setColour (juce::Label::textColourId, col); }
 
-    juce::Slider slider;
+    /** Shows the live value coming from the mod matrix (norm = 0..1 parameter position). */
+    void setModulation (bool active, float norm)
+    {
+        slider.setModulation (active, slider.proportionOfLengthToValue (norm));
+    }
+
+    ModSlider slider;
     juce::TextButton button;
     juce::ComboBox combo;
 
@@ -338,7 +393,7 @@ public:
         g.fillRect (W - 9, 6.0f, 2.0f, H - 26);
         g.setColour (c::white.withAlpha (0.8f));
         g.setFont (boldItalic (11.0f));
-        g.drawText ("POS " + juce::String (pos, 0) + "%   SIZE " + juce::String (size, 0) + " ms", 12, 8, 260, 14,
+        g.drawText ("POS " + juce::String (juce::roundToInt (pos)) + "%   SIZE " + juce::String (juce::roundToInt (size)) + " ms", 12, 8, 260, 14,
                     juce::Justification::left);
     }
 

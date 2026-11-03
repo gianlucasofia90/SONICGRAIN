@@ -11,9 +11,9 @@ Effetto audio granulare, glitch, tape e modulazione, in formato **VST3 / AU / AA
 - **Colour**: Bits, Downsample, Tone, Wow, Flutter, Drive, Dry/Wet, Output.
 - **Imager**: Width 0–200 % (M/S) e Bass Mono, spettroscopio polare **L C R** con barra di correlazione.
 - **Sync**: DAW (segue il playhead dell'host) o FREE (BPM interno 40–240).
-- **2 LFO**: 7 forme, sync a divisioni (8 bar … 1/16T) o 0.02–20 Hz.
+- **4 LFO**: 7 forme, sync a divisioni (8 bar … 1/16T) o 0.02–20 Hz.
 - **METRO SEQ**, ispirato a Intellijel Metropolix: 8 stadi con valore, pulse, ratchet, gate (MULTI / HOLD / SINGLE / REST), slide e probabilità. Direzioni Forward, Reverse, Pendulum, Random e Brownian.
-- **Mod matrix** a 8 slot: LFO 1, LFO 2, SEQ e SEQ Gate verso 25 destinazioni, amount ±100 %.
+- **Mod matrix** a 8 slot: LFO 1–4, SEQ e SEQ Gate verso 25 destinazioni, amount ±100 %. Potenziometri e valori numerici delle destinazioni seguono la modulazione in tempo reale: l'arco oro mostra l'escursione, la tacca il valore impostato. Il parametro salvato non cambia e tenendo premuto il potenziometro si vede il valore impostato.
 - **Preset**: 8 di fabbrica (anche come program dell'host) più preset utente in `~/Music/Sonic Grain Presets/*.sgpreset`.
 
 Interfaccia 1280×800.

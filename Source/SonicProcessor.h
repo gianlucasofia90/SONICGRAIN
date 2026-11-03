@@ -14,7 +14,11 @@ static inline const char* kDestIds[kNumDests] = { "gpos", "gsize", "gdens", "gpi
 static inline const char* kDestNames[kNumDests] = { "Position", "Size", "Density", "Pitch", "Spray", "Pitch Rnd",
     "Reverse", "Shape", "Spread", "Feedback", "Cloud", "Glitch", "Rpt Pitch", "Bits", "Downsmp", "Tone", "Wow",
     "Flutter", "Drive", "Dry/Wet", "HPF", "HPF Q", "LPF", "LPF Reso", "Width" };
-static inline const char* kSrcNames[5] = { "Off", "LFO 1", "LFO 2", "SEQ", "SEQ Gate" };
+// Append only: saved sessions store the index of the source.
+static constexpr int kNumSrcs = 7;
+static inline const char* kSrcNames[kNumSrcs] = { "Off", "LFO 1", "LFO 2", "SEQ", "SEQ Gate", "LFO 3", "LFO 4" };
+static constexpr int kNumLfos = 4;
+static constexpr int kLfoSrc[kNumLfos] = { 1, 2, 5, 6 };   // matrix source index of each LFO
 }
 
 class SonicProcessor : public juce::AudioProcessor
@@ -56,9 +60,15 @@ public:
     const sonic::SonicEngine& getEngine() const { return engine; }
     struct Ui
     {
-        std::atomic<float> lfo[2] { 0.0f, 0.0f }, lfoPhase[2] { 0.0f, 0.0f }, seqVal { 0 }, seqGate { 0 };
+        std::atomic<float> lfo[sonic::kNumLfos] { 0.0f, 0.0f, 0.0f, 0.0f };
+        std::atomic<float> lfoPhase[sonic::kNumLfos] { 0.0f, 0.0f, 0.0f, 0.0f };
+        std::atomic<float> seqVal { 0 }, seqGate { 0 };
         std::atomic<int> seqStage { 0 };
         std::atomic<float> pos { 15 }, size { 120 }, spray { 20 }, pitch { 0 }, bpm { 120 }, corr { 1 };
+        // live modulated value of each matrix destination (0..1), valid where modMask has its bit set
+        std::array<std::atomic<float>, sonic::kNumDests> modNorm {};
+        std::atomic<juce::uint32> modMask { 0 };
+        std::atomic<juce::uint32> blockCount { 0 };   // lets the editor notice that audio has stopped
     } ui;
     static constexpr int kScopeN = 4096;
     void copyScope (float* l, float* r, int n) const;
@@ -66,7 +76,7 @@ public:
 private:
 
     sonic::SonicEngine engine;
-    sonic::Lfo lfo[2] { sonic::Lfo (11), sonic::Lfo (23) };
+    sonic::Lfo lfo[sonic::kNumLfos] { sonic::Lfo (11), sonic::Lfo (23), sonic::Lfo (37), sonic::Lfo (53) };
     sonic::MetroSeq seq;
     juce::AudioBuffer<float> scratch;
     double sr = 48000.0, internalPpq = 0.0;
@@ -80,7 +90,8 @@ private:
     std::array<juce::RangedAudioParameter*, sonic::kNumDests> destParam {};
     struct Ptrs
     {
-        std::atomic<float>* shape[2]; std::atomic<float>* sync[2]; std::atomic<float>* rate[2]; std::atomic<float>* div[2];
+        std::atomic<float>* shape[sonic::kNumLfos]; std::atomic<float>* sync[sonic::kNumLfos];
+        std::atomic<float>* rate[sonic::kNumLfos]; std::atomic<float>* div[sonic::kNumLfos];
         std::atomic<float>* val[8]; std::atomic<float>* pulses[8]; std::atomic<float>* ratch[8];
         std::atomic<float>* gate[8]; std::atomic<float>* slide[8]; std::atomic<float>* prob[8];
         std::atomic<float>* src[sonic::kNumSlots]; std::atomic<float>* dst[sonic::kNumSlots]; std::atomic<float>* amt[sonic::kNumSlots];

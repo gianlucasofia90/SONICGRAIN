@@ -5,8 +5,7 @@
 class SonicEditor : public juce::AudioProcessorEditor, private juce::Timer
 {
 public:
-    explicit SonicEditor (SonicProcessor& p) : AudioProcessorEditor (p), proc (p), wave (p), scope (p),
-                                               lfoView1 (p, 0), lfoView2 (p, 1)
+    explicit SonicEditor (SonicProcessor& p) : AudioProcessorEditor (p), proc (p), wave (p), scope (p)
     {
         setLookAndFeel (&lnf);
         using K = sonic::Control::Kind;
@@ -39,16 +38,15 @@ public:
         add ("slice", "Slice", K::Menu);
         add ("rhold", "Hold", K::Box);
         // LFOs
-        for (int i = 1; i <= 2; ++i)
+        for (int i = 1; i <= sonic::kNumLfos; ++i)
         {
             const juce::String pre = "lfo" + juce::String (i) + "_";
             add (pre + "shape", "Shape", K::Menu);
             add (pre + "sync", "SYNC", K::Toggle);
-            add (pre + "rate", "Rate", K::Knob);
+            add (pre + "rate", "Rate", K::HBar);
             add (pre + "div", "Division", K::Menu);
+            addAndMakeVisible (lfoViews.add (new sonic::LfoView (p, i - 1)));
         }
-        addAndMakeVisible (lfoView1);
-        addAndMakeVisible (lfoView2);
         // sequencer
         add ("seq_len", "Length", K::Box);
         add ("seq_dir", "Direction", K::Menu);
@@ -75,6 +73,7 @@ public:
         addAndMakeVisible (wave);
         addAndMakeVisible (scope);
         for (auto* id : { "syncmode", "freebpm", "outdb" }) byId[id]->setCaptionColour (sonic::c::skyLt);
+        for (int d = 0; d < sonic::kNumDests; ++d) destControls[(size_t) d] = byId[sonic::kDestIds[d]];
 
         // presets
         for (auto* b : { &prevBtn, &nextBtn, &saveBtn, &delBtn }) addAndMakeVisible (b);
@@ -101,7 +100,7 @@ public:
         };
 
         setSize (1280, 800);
-        startTimerHz (10);
+        startTimerHz (kDisplayHz);
     }
     ~SonicEditor() override { setLookAndFeel (nullptr); }
 
@@ -142,8 +141,8 @@ public:
         panel (g, { 16, 388, 330, 180 }, "FILTER");
         panel (g, { 356, 388, 330, 180 }, "GLITCH");
         panel (g, { 696, 388, 568, 180 }, "COLOUR");
-        panel (g, { 16, 580, 250, 208 }, "LFO 1");
-        panel (g, { 276, 580, 250, 208 }, "LFO 2");
+        for (int i = 0; i < sonic::kNumLfos; ++i)
+            panel (g, { 16.0f + (float) i * 130.0f, 580, 120, 208 }, "LFO " + juce::String (i + 1));
         panel (g, { 536, 580, 470, 208 }, "METRO SEQ");
         panel (g, { 1016, 580, 248, 208 }, "MOD MATRIX");
 
@@ -197,15 +196,15 @@ public:
         const char* co[7] = { "crbits", "dsamp", "tone", "wow", "flutter", "drive", "drywet" };
         for (int i = 0; i < 7; ++i) at (co[i], 708 + i * 79, 420, 78, 136);
         // LFOs
-        for (int i = 0; i < 2; ++i)
+        for (int i = 0; i < sonic::kNumLfos; ++i)
         {
-            const int x = 16 + i * 260;
+            const int x = 16 + i * 130;
             const juce::String pre = "lfo" + juce::String (i + 1) + "_";
-            (i == 0 ? lfoView1 : lfoView2).setBounds (x + 12, 610, 226, 62);
-            at (pre + "shape", x + 12, 678, 112, 40);
-            at (pre + "sync", x + 12, 726, 112, 26);
-            at (pre + "rate", x + 132, 676, 106, 106);
-            at (pre + "div", x + 132, 700, 106, 40);
+            lfoViews[i]->setBounds (x + 9, 608, 102, 52);
+            at (pre + "shape", x + 9, 663, 102, 38);
+            at (pre + "div", x + 9, 703, 102, 38);
+            at (pre + "rate", x + 9, 703, 102, 38);
+            at (pre + "sync", x + 9, 749, 102, 28);
         }
         // sequencer
         at ("seq_len", 584, 604, 60, 32);
@@ -236,6 +235,20 @@ public:
     }
 
     sonic::PolarScope& getScope() { return scope; }
+    sonic::Control* getControl (const juce::String& id) { return byId[id]; }
+
+    /** Moves the knobs of the matrix destinations to their live values. */
+    void updateModulationDisplay()
+    {
+        const auto count = proc.ui.blockCount.load (std::memory_order_relaxed);
+        idleFrames = count != lastBlockCount ? 0 : idleFrames + 1;
+        lastBlockCount = count;
+        // no audio coming through (bypassed or stopped host): show the real values
+        const juce::uint32 mask = idleFrames < kDisplayHz / 2 ? proc.ui.modMask.load() : 0;
+        for (int d = 0; d < sonic::kNumDests; ++d)
+            if (auto* ctl = destControls[(size_t) d])
+                ctl->setModulation (((mask >> d) & 1u) != 0, proc.ui.modNorm[(size_t) d].load (std::memory_order_relaxed));
+    }
 
 private:
     void panel (juce::Graphics& g, juce::Rectangle<float> r, const juce::String& title)
@@ -270,7 +283,7 @@ private:
     {
         auto v = [this] (const char* id) { return proc.state.getRawParameterValue (id)->load() > 0.5f; };
         if (auto* c = byId["freebpm"]) c->setVisible (v ("syncmode"));
-        for (int i = 1; i <= 2; ++i)
+        for (int i = 1; i <= sonic::kNumLfos; ++i)
         {
             const juce::String pre = "lfo" + juce::String (i) + "_";
             const bool sync = proc.state.getRawParameterValue (pre + "sync")->load() > 0.5f;
@@ -281,19 +294,27 @@ private:
 
     void timerCallback() override
     {
+        updateModulationDisplay();
+        if (++slowTick < kDisplayHz / 10) return;
+        slowTick = 0;
         updateVisibility();
         repaint (536, 580, 470, 208);
         if (presetBox.getSelectedItemIndex() != proc.presets.getCurrent()) refreshPresets();
     }
 
+    static constexpr int kDisplayHz = 30;
+
     SonicProcessor& proc;
     sonic::LookAndFeel lnf;
     sonic::WaveformView wave;
     sonic::PolarScope scope;
-    sonic::LfoView lfoView1, lfoView2;
+    juce::OwnedArray<sonic::LfoView> lfoViews;
     juce::TextButton prevBtn, nextBtn, saveBtn, delBtn;
     juce::ComboBox presetBox;
     juce::OwnedArray<sonic::Control> controls;
     juce::HashMap<juce::String, sonic::Control*> byId;
+    std::array<sonic::Control*, sonic::kNumDests> destControls {};
+    juce::uint32 lastBlockCount = 0;
+    int idleFrames = 0, slowTick = 0;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SonicEditor)
 };

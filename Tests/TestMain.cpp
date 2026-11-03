@@ -144,6 +144,71 @@ int main (int argc, char** argv)
         gp.presets.removeCurrent();
         CHECK (gp.presets.getNames().indexOf ("zz test preset") < 0, "user preset delete");
     }
+    {   // LFO 3 / 4 reach the matrix; the UI shows the live value, the parameter stays put
+        SonicProcessor gp; FakeHead head;
+        gp.setPlayHead (&head); gp.setPlayConfigDetails (2, 2, sr, 512); gp.prepareToPlay (sr, 512);
+        auto& s = gp.state;
+        CHECK (s.getParameter ("lfo4_rate") != nullptr, "LFO 3 and 4 parameters exist");
+        setP (s, "cloud", 50);
+        setP (s, "m1_src", 5); setP (s, "m1_dst", 0);  setP (s, "m1_amt", 40);    // LFO 3 -> Position
+        setP (s, "m2_src", 6); setP (s, "m2_dst", 22); setP (s, "m2_amt", -60);   // LFO 4 -> LPF
+        setP (s, "lfo3_div", 7); setP (s, "lfo4_shape", 1); setP (s, "lfo4_div", 7);
+        setP (s, "lpf", 2000);
+        std::unique_ptr<juce::AudioProcessorEditor> ed (gp.createEditor());
+        auto* se = dynamic_cast<SonicEditor*> (ed.get());
+        auto* posCtl = se->getControl ("gpos");
+        auto* lpfCtl = se->getControl ("lpf");
+        auto* idleCtl = se->getControl ("gsize");
+        std::set<juce::String> posTexts, lpfTexts;
+        float posLo = 1, posHi = 0, lfoLo = 1, lfoHi = -1;
+        double ph = 0;
+        for (int b = 0; b < 300; ++b)
+        {
+            double e = 0, m = 0; bool f = true;
+            feed (gp, head, sr, 1, ph, false, f, e, m);
+            se->updateModulationDisplay();
+            posLo = std::min (posLo, gp.ui.modNorm[0].load()); posHi = std::max (posHi, gp.ui.modNorm[0].load());
+            lfoLo = std::min (lfoLo, gp.ui.lfo[3].load()); lfoHi = std::max (lfoHi, gp.ui.lfo[3].load());
+            posTexts.insert (posCtl->slider.getTextFromValue (posCtl->slider.getValue()));
+            lpfTexts.insert (lpfCtl->slider.getTextFromValue (lpfCtl->slider.getValue()));
+        }
+        std::printf ("position norm %.3f..%.3f, %d position texts, %d lpf texts\n", posLo, posHi, (int) posTexts.size(), (int) lpfTexts.size());
+        CHECK (posHi - posLo > 0.5f, "LFO 3 sweeps its destination");
+        CHECK (lfoHi - lfoLo > 1.5f, "LFO 4 runs");
+        CHECK (gp.ui.modMask.load() == ((1u << 0) | (1u << 22)), "only the routed destinations are flagged");
+        CHECK (posTexts.size() > 10 && lpfTexts.size() > 10, "numeric values follow the modulation");
+        CHECK (! posTexts.begin()->containsChar ('.'), "values without decimals are rounded");
+        CHECK (posCtl->slider.isModulationShown() && ! idleCtl->slider.isModulationShown(), "only routed knobs show modulation");
+        CHECK (std::abs (posCtl->slider.getValue() - 15.0) < 1e-3, "knob value stays the set value");
+        CHECK (std::abs (s.getRawParameterValue ("gpos")->load() - 15.0f) < 1e-3f, "parameter is not written by the modulation");
+        // audio stops: back to the real value
+        for (int k = 0; k < 20; ++k) se->updateModulationDisplay();
+        CHECK (! posCtl->slider.isModulationShown(), "knobs return to the set value when audio stops");
+        CHECK (posCtl->slider.getTextFromValue (posCtl->slider.getValue()) == "15 %", "text returns to the set value");
+        // matrix slot off: back to the real value
+        { double e = 0, m = 0; bool f = true; feed (gp, head, sr, 1, ph, false, f, e, m); }
+        se->updateModulationDisplay();
+        CHECK (posCtl->slider.isModulationShown(), "modulation display resumes with audio");
+        setP (s, "m1_src", 0);
+        { double e = 0, m = 0; bool f = true; feed (gp, head, sr, 1, ph, false, f, e, m); }
+        se->updateModulationDisplay();
+        CHECK (! posCtl->slider.isModulationShown(), "knob released when its slot is switched off");
+    }
+    {   // a session saved before LFO 3/4 existed
+        SonicProcessor gp;
+        setP (gp.state, "m1_src", 3); setP (gp.state, "m1_dst", 22); setP (gp.state, "m1_amt", 55); setP (gp.state, "m2_src", 2);
+        auto tree = gp.state.copyState();
+        for (auto id : { "lfo3_shape", "lfo3_sync", "lfo3_rate", "lfo3_div", "lfo4_shape", "lfo4_sync", "lfo4_rate", "lfo4_div" })
+            tree.removeChild (tree.getChildWithProperty ("id", id), nullptr);
+        juce::MemoryBlock mbk;
+        { auto xml = tree.createXml(); juce::AudioProcessor::copyXmlToBinary (*xml, mbk); }
+        SonicProcessor g2;
+        setP (g2.state, "lfo3_div", 0);
+        g2.setStateInformation (mbk.getData(), (int) mbk.getSize());
+        CHECK (std::lround (g2.state.getRawParameterValue ("m1_src")->load()) == 3, "old session keeps SEQ as source");
+        CHECK (std::lround (g2.state.getRawParameterValue ("m2_src")->load()) == 2, "old session keeps LFO 2 as source");
+        CHECK (std::lround (g2.state.getRawParameterValue ("lfo3_div")->load()) == 4, "old session loads LFO 3 defaults");
+    }
     std::printf ("\n%s (%d failures)\n", failures ? "TESTS FAILED" : "ALL TESTS PASSED", failures);
     return failures ? 1 : 0;
 }
@@ -170,7 +235,11 @@ static void runSnap (const juce::String& path)
             gp.processBlock (buf, midi); head.ppq += 512 * 2.0 / 48000.0;
         }
         std::unique_ptr<juce::AudioProcessorEditor> ed (gp.createEditor());
-        if (auto* se = dynamic_cast<SonicEditor*> (ed.get())) for (int k = 0; k < 20; ++k) se->getScope().refresh();
+        if (auto* se = dynamic_cast<SonicEditor*> (ed.get()))
+        {
+            se->updateModulationDisplay();
+            for (int k = 0; k < 20; ++k) se->getScope().refresh();
+        }
         auto img = ed->createComponentSnapshot (ed->getLocalBounds());
         juce::File f (juce::File::getCurrentWorkingDirectory().getChildFile (path)); f.deleteFile();
         juce::FileOutputStream os (f); juce::PNGImageFormat().writeImageToStream (img, os);

@@ -133,7 +133,9 @@ inline std::unique_ptr<juce::AudioParameterFloat> fparam (const juce::String& id
     const int dec = (hi - lo) >= 100.0f ? 0 : 1;
     auto toText = [dec, unit] (float v, int) {
         if (unit == "Hz" && v >= 1000.0f) return juce::String (v / 1000.0f, 1) + " kHz";
-        return juce::String (v, dec) + (unit.isNotEmpty() ? " " + unit : juce::String());
+        // String (v, 0) would print every digit, not round
+        const auto number = dec > 0 ? juce::String (v, dec) : juce::String (juce::roundToInt (v));
+        return number + (unit.isNotEmpty() ? " " + unit : juce::String());
     };
     return std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { id, 1 }, name, r, def,
                                                         juce::AudioParameterFloatAttributes().withLabel (unit)

@@ -50,14 +50,16 @@ juce::AudioProcessorValueTreeState::ParameterLayout SonicProcessor::createLayout
     juce::StringArray shapes, divs;
     for (auto* s : Lfo::kShapeNames) shapes.add (s);
     for (auto* d : kDivNames) divs.add (d);
-    for (int i = 1; i <= 2; ++i)
+    auto addLfo = [&] (int i, int defaultDiv)
     {
         juce::String pre = "lfo" + juce::String (i) + "_";
         l.add (cparam (pre + "shape", "LFO" + juce::String (i) + " Shape", shapes, 0));
         l.add (bparam (pre + "sync", "LFO" + juce::String (i) + " Sync", true));
         l.add (fparam (pre + "rate", "LFO" + juce::String (i) + " Rate", 0.02f, 20, 1, "Hz", 1));
-        l.add (cparam (pre + "div", "LFO" + juce::String (i) + " Div", divs, i == 1 ? 3 : 5));
-    }
+        l.add (cparam (pre + "div", "LFO" + juce::String (i) + " Div", divs, defaultDiv));
+    };
+    addLfo (1, 3);
+    addLfo (2, 5);
     // sequencer
     juce::StringArray gates, dirs;
     for (auto* g : MetroSeq::kGateNames) gates.add (g);
@@ -88,6 +90,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout SonicProcessor::createLayout
         l.add (cparam (pre + "dst", "Mod " + juce::String (m) + " Dest", dsts, 0));
         l.add (fparam (pre + "amt", "Mod " + juce::String (m) + " Amount", -100, 100, 0, "%"));
     }
+    // LFO 3 and 4 live here because new parameters go at the end
+    addLfo (3, 4);
+    addLfo (4, 6);
     return l;
 }
 
@@ -97,7 +102,7 @@ SonicProcessor::SonicProcessor()
       state (*this, nullptr, "SONICGRAIN", createLayout())
 {
     for (int d = 0; d < kNumDests; ++d) destParam[(size_t) d] = state.getParameter (kDestIds[d]);
-    for (int i = 0; i < 2; ++i)
+    for (int i = 0; i < kNumLfos; ++i)
     {
         const juce::String pre = "lfo" + juce::String (i + 1) + "_";
         pl.shape[i] = raw (pre + "shape"); pl.sync[i] = raw (pre + "sync"); pl.rate[i] = raw (pre + "rate"); pl.div[i] = raw (pre + "div");
@@ -172,9 +177,9 @@ void SonicProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
     base.hpf = F ("hpf"); base.hpq = F ("hpq"); base.lpf = F ("lpf"); base.lreso = F ("lreso");
     const float baseWidth = F ("imgwidth"), monoFreq = F ("monofreq");
 
-    int lShape[2], lDiv[2]; bool lSync[2]; float lRate[2];
+    int lShape[kNumLfos], lDiv[kNumLfos]; bool lSync[kNumLfos]; float lRate[kNumLfos];
     auto R0 = [] (std::atomic<float>* a) { return (int) std::lround (a->load()); };
-    for (int i = 0; i < 2; ++i)
+    for (int i = 0; i < kNumLfos; ++i)
     {
         lShape[i] = R0 (pl.shape[i]); lSync[i] = pl.sync[i]->load() > 0.5f;
         lRate[i] = pl.rate[i]->load(); lDiv[i] = R0 (pl.div[i]);
@@ -189,11 +194,12 @@ void SonicProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
     }
     int mSrc[kNumSlots], mDst[kNumSlots]; float mAmt[kNumSlots];
     bool anyMod = false;
+    juce::uint32 modMask = 0;
     for (int m = 0; m < kNumSlots; ++m)
     {
         mSrc[m] = R0 (pl.src[m]); mDst[m] = juce::jlimit (0, kNumDests - 1, R0 (pl.dst[m]));
         mAmt[m] = pl.amt[m]->load() * 0.01f;
-        anyMod |= (mSrc[m] != 0 && mAmt[m] != 0.0f);
+        if (mSrc[m] != 0 && mAmt[m] != 0.0f) { anyMod = true; modMask |= (juce::uint32) 1 << mDst[m]; }
     }
 
     if (scratch.getNumSamples() < n) scratch.setSize (2, n, false, false, true);
@@ -209,8 +215,8 @@ void SonicProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
     {
         const int len = juce::jmin (kChunk, n - off);
         const double ppq = ppq0 + off * bps;
-        float srcVal[5] = { 0, 0, 0, 0, 0 };
-        for (int i = 0; i < 2; ++i) srcVal[1 + i] = lfo[i].tick (lShape[i], lSync[i], lDiv[i], lRate[i], ppq, len, sr);
+        float srcVal[kNumSrcs] = {};
+        for (int i = 0; i < kNumLfos; ++i) srcVal[kLfoSrc[i]] = lfo[i].tick (lShape[i], lSync[i], lDiv[i], lRate[i], ppq, len, sr);
         seq.update (ppq, len, sr, sp);
         srcVal[3] = seq.getValue();
         srcVal[4] = seq.getGate();
@@ -232,6 +238,10 @@ void SonicProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
                     auto* p = destParam[(size_t) d];
                     *fields[d] = p->convertFrom0to1 (juce::jlimit (0.0f, 1.0f, p->convertTo0to1 (*fields[d]) + off01[d]));
                 }
+            if (off == 0)
+                for (int d = 0; d < kNumDests; ++d)
+                    if ((modMask >> d) & 1u)
+                        ui.modNorm[(size_t) d].store (destParam[(size_t) d]->convertTo0to1 (*fields[d]), std::memory_order_relaxed);
         }
 
         engine.process (L + off, R + off, len, gp, juce::jmax (0.0, ppq), bpm, true);
@@ -248,10 +258,11 @@ void SonicProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
         }
         if (off == 0)
         {
-            ui.lfo[0].store (srcVal[1]); ui.lfo[1].store (srcVal[2]);
-            ui.lfoPhase[0].store (lfo[0].getPhase()); ui.lfoPhase[1].store (lfo[1].getPhase());
+            for (int i = 0; i < kNumLfos; ++i) { ui.lfo[i].store (srcVal[kLfoSrc[i]]); ui.lfoPhase[i].store (lfo[i].getPhase()); }
             ui.seqVal.store (srcVal[3]); ui.seqGate.store (srcVal[4]); ui.seqStage.store (seq.getStage());
             ui.pos.store (gp.gpos); ui.size.store (gp.gsize); ui.spray.store (gp.spray); ui.pitch.store (gp.gpitch);
+            ui.modMask.store (modMask);
+            ui.blockCount.fetch_add (1, std::memory_order_relaxed);
         }
     }
 
