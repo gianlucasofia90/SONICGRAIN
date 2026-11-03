@@ -13,6 +13,7 @@ endif()
 option(SONICGRAIN_BUILD_AAX "Also build AAX (Pro Tools; needs PACE signing to load in release Pro Tools)" OFF)
 option(SONICGRAIN_BUILD_TESTS "Build the headless test runner" OFF)
 option(SONICGRAIN_COPY_AFTER_BUILD "Install the plugins into the user plug-in folders after building" ON)
+set(SONICGRAIN_AAX_COPY_DIR "" CACHE PATH "Where the AAX is copied after building (empty = JUCE default, the system Avid folder, needs write access)")
 
 # ---- JUCE: -DJUCE_DIR=<path>, or ./JUCE, or downloaded automatically (needs git)
 set(SONICGRAIN_JUCE_TAG "8.0.10" CACHE STRING "JUCE version fetched when no local copy is given")
@@ -43,7 +44,13 @@ if(SONICGRAIN_BUILD_AAX)
     list(APPEND SONICGRAIN_FORMATS AAX)
 endif()
 
+set(SONICGRAIN_EXTRA_PLUGIN_ARGS)
+if(SONICGRAIN_AAX_COPY_DIR)
+    list(APPEND SONICGRAIN_EXTRA_PLUGIN_ARGS AAX_COPY_DIR "${SONICGRAIN_AAX_COPY_DIR}")
+endif()
+
 juce_add_plugin(SonicGrain
+    ${SONICGRAIN_EXTRA_PLUGIN_ARGS}
     VERSION ${PROJECT_VERSION}
     COMPANY_NAME "Gianluca Sofia"
     BUNDLE_ID "com.gianlucasofia.sonicgrain"

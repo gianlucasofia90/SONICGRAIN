@@ -37,8 +37,11 @@ echo ">> CMake: $("$CMAKE" --version | head -1)"
 
 # 3) build (JUCE viene scaricato in automatico al primo avvio)
 ARCH=$(uname -m)
+# AAX: cartella di sistema di Pro Tools se scrivibile, altrimenti resta in build-mac
+AAXDIR="/Library/Application Support/Avid/Audio/Plug-Ins"
+[ -w "$AAXDIR" ] || AAXDIR="$PWD/build-mac/aax-installed"
 echo ">> Configuro (architettura $ARCH)..."
-"$CMAKE" -B build-mac -DCMAKE_BUILD_TYPE=Release -DSONICGRAIN_BUILD_AAX=ON -DCMAKE_OSX_ARCHITECTURES="$ARCH" || fail "configurazione"
+"$CMAKE" -B build-mac -DCMAKE_BUILD_TYPE=Release -DSONICGRAIN_BUILD_AAX=ON -DSONICGRAIN_AAX_COPY_DIR="$AAXDIR" -DCMAKE_OSX_ARCHITECTURES="$ARCH" || fail "configurazione"
 echo ">> Compilo (qualche minuto)..."
 "$CMAKE" --build build-mac --config Release -j "$(sysctl -n hw.ncpu)" || fail "compilazione"
 

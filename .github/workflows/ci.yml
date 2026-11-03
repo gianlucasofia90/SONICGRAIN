@@ -60,7 +60,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Configure
-        run: cmake -B build -G Xcode -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DSONICGRAIN_BUILD_AAX=ON -DSONICGRAIN_BUILD_TESTS=ON
+        run: cmake -B build -G Xcode -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DSONICGRAIN_BUILD_AAX=ON -DSONICGRAIN_BUILD_TESTS=ON -DSONICGRAIN_AAX_COPY_DIR="$PWD/build/aax-installed"
       - name: Build
         run: cmake --build build --config $BUILD_TYPE --parallel 3 -- -quiet
       - name: Unit tests
