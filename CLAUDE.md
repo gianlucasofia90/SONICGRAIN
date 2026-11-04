@@ -6,5 +6,5 @@
 - Headless Linux without the X dev packages: export `CXXFLAGS="-DJUCE_USE_XRANDR=0 -DJUCE_USE_XINERAMA=0 -DJUCE_USE_XCURSOR=0 -DJUCE_USE_XRENDER=0 -DJUCE_ALSA=0 -DJUCE_JACK=0"` before configuring. Use `-j3`: higher values run out of memory.
 - Never change these, or hosts lose saved sessions: plugin code `Sgrn`, manufacturer code `Gsof`, parameter IDs, or the order of `kDestIds` / `kSrcNames` in `SonicProcessor.h`. Add new parameters at the end.
 - On/off parameters are 2-item choices (`bparam` in `IDMLookAndFeel.h`), so pluginval strictness 8 passes the state-restore test.
-- Release: update `CHANGELOG.md` and `project(... VERSION x.y.z)` in `CMakeLists.txt`, then push tag `vx.y.z`. CI builds and publishes the Release.
+- Release: update `CHANGELOG.md` and `project(... VERSION x.y.z)` in `CMakeLists.txt`, then push tag `vx.y.z` (`scripts/push-tag.command` does the checks and the push). CI builds and publishes the Release.
 - The user is Italian: user-facing docs (README, CHANGELOG, scripts) are in Italian.

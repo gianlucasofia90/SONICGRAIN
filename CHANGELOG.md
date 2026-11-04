@@ -3,6 +3,7 @@
 ## [0.2.6] - 2026-11-04
 - Nuovo logo nell'header: un disco blu con grani che corrono in avanti dentro un anello sfumato arancio-menta, seguito dalla scritta SONIC GRAIN in Rubik Black Italic, senza più l'ombra rossa/verde.
 - I file del logo (icona, versioni mono, orizzontale, verticale, solo scritta; SVG e PNG) sono in `Resources/logo`.
+- Nuovo script `scripts/push-tag.command`: controlla main, CHANGELOG e versione, poi crea e pubblica il tag della release.
 
 ## [0.2.5] - 2026-11-04
 - SYNC e TEMPO in un'unica finestra scura, come in Dr. Segg-uencer e Multitails: menu DAW/FREE a sinistra, a destra il tempo in uso in grande (quello dell'host in DAW). In FREE si trascina il numero per cambiare il BPM (doppio clic: 120). La finestra sta sul bordo destro, nella stessa posizione degli altri plugin; OUTPUT ha la sua finestra subito a sinistra.
