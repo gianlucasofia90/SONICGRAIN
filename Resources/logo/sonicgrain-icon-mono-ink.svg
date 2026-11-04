@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+<circle cx="256" cy="256" r="240" fill="#0b1430"/>
+<clipPath id="ck"><circle cx="256" cy="256" r="206.4"/></clipPath>
+<defs><linearGradient id="tk" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity="0.95"/></linearGradient></defs>
+<g clip-path="url(#ck)" transform="rotate(-14 256 256)">
+<rect x="236.0" y="138.6" width="132.0" height="13.9" rx="7.0" fill="url(#tk)"/>
+<circle cx="368.0" cy="145.6" r="10.0" fill="#fff"/>
+<circle cx="216.8" cy="145.6" r="4.9" fill="#fff" fill-opacity="0.50"/>
+<circle cx="192.8" cy="145.6" r="3.2" fill="#fff" fill-opacity="0.30"/>
+<rect x="274.7" y="178.1" width="96.0" height="11.8" rx="5.9" fill="url(#tk)"/>
+<circle cx="370.7" cy="184.0" r="8.5" fill="#fff"/>
+<circle cx="255.5" cy="184.0" r="4.1" fill="#fff" fill-opacity="0.50"/>
+<circle cx="231.5" cy="184.0" r="2.7" fill="#fff" fill-opacity="0.30"/>
+<rect x="205.6" y="212.0" width="187.2" height="20.9" rx="10.4" fill="url(#tk)"/>
+<circle cx="392.8" cy="222.4" r="15.0" fill="#fff"/>
+<circle cx="186.4" cy="222.4" r="7.3" fill="#fff" fill-opacity="0.50"/>
+<circle cx="162.4" cy="222.4" r="4.8" fill="#fff" fill-opacity="0.30"/>
+<rect x="233.1" y="252.4" width="148.8" height="16.7" rx="8.4" fill="url(#tk)"/>
+<circle cx="381.9" cy="260.8" r="12.0" fill="#fff"/>
+<circle cx="213.9" cy="260.8" r="5.8" fill="#fff" fill-opacity="0.50"/>
+<circle cx="189.9" cy="260.8" r="3.8" fill="#fff" fill-opacity="0.30"/>
+<rect x="159.6" y="286.7" width="228.0" height="25.1" rx="12.5" fill="url(#tk)"/>
+<circle cx="387.6" cy="299.2" r="18.0" fill="#fff"/>
+<circle cx="140.4" cy="299.2" r="8.8" fill="#fff" fill-opacity="0.50"/>
+<circle cx="116.4" cy="299.2" r="5.8" fill="#fff" fill-opacity="0.30"/>
+<rect x="255.0" y="330.3" width="120.0" height="14.6" rx="7.3" fill="url(#tk)"/>
+<circle cx="375.0" cy="337.6" r="10.5" fill="#fff"/>
+<circle cx="235.8" cy="337.6" r="5.1" fill="#fff" fill-opacity="0.50"/>
+<circle cx="211.8" cy="337.6" r="3.4" fill="#fff" fill-opacity="0.30"/>
+<rect x="200.1" y="367.3" width="158.4" height="17.4" rx="8.7" fill="url(#tk)"/>
+<circle cx="358.5" cy="376.0" r="12.5" fill="#fff"/>
+<circle cx="180.9" cy="376.0" r="6.1" fill="#fff" fill-opacity="0.50"/>
+<circle cx="156.9" cy="376.0" r="4.0" fill="#fff" fill-opacity="0.30"/>
+</g>
+</svg>

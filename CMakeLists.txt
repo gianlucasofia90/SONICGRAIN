@@ -6,7 +6,7 @@ if(CMAKE_HOST_APPLE AND NOT CMAKE_OSX_ARCHITECTURES)
     set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "macOS architectures" FORCE)
 endif()
 
-project(SonicGrain VERSION 0.2.5 LANGUAGES C CXX)
+project(SonicGrain VERSION 0.2.6 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -69,8 +69,9 @@ juce_add_plugin(SonicGrain
     AU_MAIN_TYPE kAudioUnitType_Effect
     AAX_CATEGORY AAX_ePlugInCategory_Delay)
 
-# Embedded UI fonts (Rubik, Silkscreen; SIL Open Font License, see Resources/fonts)
+# Embedded UI fonts (Rubik, Silkscreen; SIL Open Font License, see Resources/fonts) and the logo mark
 juce_add_binary_data(SonicGrainFonts HEADER_NAME SonicFonts.h NAMESPACE SonicFonts SOURCES
+    Resources/logo/sonicgrain-mark.svg
     Resources/fonts/Rubik-Medium.ttf
     Resources/fonts/Rubik-Bold.ttf
     Resources/fonts/Rubik-BlackItalic.ttf

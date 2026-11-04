@@ -223,12 +223,15 @@ public:
         // header strip, wordmark, plates behind the preset menu and the global controls
         g.setColour (c::groundAlt);
         g.fillRect (0, 0, W, HeaderH);
-        g.setFont (black (38.0f, -0.01f));
-        const juce::String name ("SONIC GRAIN");
-        const juce::Rectangle<int> wm (M, 0, 300, HeaderH);
-        g.setColour (c::go);      g.drawText (name, wm.translated (5, 5), juce::Justification::centredLeft);
-        g.setColour (c::signal);  g.drawText (name, wm.translated (3, 3), juce::Justification::centredLeft);
-        g.setColour (c::onPlate); g.drawText (name, wm, juce::Justification::centredLeft);
+        // logo: grain-speed mark + live wordmark (Rubik Black Italic), no offset shadow
+        constexpr int markSize = 46;
+        const juce::Rectangle<float> markBox ((float) M, (HeaderH - markSize) * 0.5f, (float) markSize, (float) markSize);
+        if (logoMark != nullptr)
+            logoMark->drawWithin (g, markBox, juce::RectanglePlacement::centred, 1.0f);
+        g.setFont (black (34.0f, -0.01f));
+        const int wmX = M + markSize + 12;
+        g.setColour (c::onPlate);
+        g.drawText ("SONIC GRAIN", juce::Rectangle<int> (wmX, 0, 300 - 10 - wmX, HeaderH), juce::Justification::centredLeft);
         taggedPlate (g, presetPlate.toFloat(), c::tag);
         headerWindow (g, syncWindow.toFloat());
         g.setColour (c::onPlate.withAlpha (0.2f));
@@ -496,6 +499,7 @@ private:
 
     SonicProcessor& proc;
     Layer backdrop, playhead;
+    std::unique_ptr<juce::Drawable> logoMark { juce::Drawable::createFromImageData (SonicFonts::sonicgrainmark_svg, SonicFonts::sonicgrainmark_svgSize) };
     int shownStage = -1;
     bool shownGate = false;
     WaveformView wave;
