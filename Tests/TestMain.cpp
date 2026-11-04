@@ -196,6 +196,27 @@ int main (int argc, char** argv)
         se->updateModulationDisplay();
         CHECK (! posCtl->slider.isModulationShown(), "knob released when its slot is switched off");
     }
+    {   // S&H and Smooth Rnd: the display gets the real random levels the LFO produces
+        SonicProcessor gp; FakeHead head;
+        gp.setPlayHead (&head); gp.setPlayConfigDetails (2, 2, sr, 512); gp.prepareToPlay (sr, 512);
+        setP (gp.state, "lfo3_shape", 5); setP (gp.state, "lfo3_div", 7);   // S&H, 1/16
+        setP (gp.state, "lfo4_shape", 6); setP (gp.state, "lfo4_div", 7);   // Smooth Rnd, 1/16
+        double ph = 0;
+        const auto steps0 = gp.ui.lfoSteps[2].load();
+        bool held = true, levelsDiffer = false;
+        for (int b = 0; b < 200; ++b)
+        {
+            double e = 0, m = 0; bool f = true;
+            feed (gp, head, sr, 1, ph, false, f, e, m);
+            held = held && std::abs (gp.ui.lfo[2].load() - gp.ui.lfoHist[2][0].load()) < 1e-6f;
+            levelsDiffer = levelsDiffer || std::abs (gp.ui.lfoHist[2][0].load() - gp.ui.lfoHist[2][1].load()) > 1e-3f;
+        }
+        CHECK (gp.ui.lfoSteps[2].load() - steps0 > 10, "S&H history advances once per cycle");
+        CHECK (held, "S&H output is the newest level of its history");
+        CHECK (levelsDiffer, "S&H history holds real, different levels");
+        const float a = gp.ui.lfoHist[3][1].load(), z = gp.ui.lfoHist[3][0].load(), v = gp.ui.lfo[3].load();
+        CHECK (v >= std::min (a, z) - 1e-4f && v <= std::max (a, z) + 1e-4f, "Smooth Rnd glides between its last two levels");
+    }
     {   // resizable editor: keeps 16:10, scales the whole view, remembers the size in the state
         SonicProcessor gp;
         std::unique_ptr<juce::AudioProcessorEditor> ed (gp.createEditor());

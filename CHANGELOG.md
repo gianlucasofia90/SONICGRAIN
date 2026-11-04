@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.5] - 2026-11-04
+- SYNC e TEMPO in un'unica finestra scura, come in Dr. Segg-uencer e Multitails: menu DAW/FREE a sinistra, a destra il tempo in uso in grande (quello dell'host in DAW). In FREE si trascina il numero per cambiare il BPM (doppio clic: 120). La finestra sta sul bordo destro, nella stessa posizione degli altri plugin; OUTPUT ha la sua finestra subito a sinistra.
+- Titoli delle sezioni senza targa e senza ombra: parola chiave chiara sopra il nome in grassetto, entrambe spaziate e allineate a sinistra, con una linea sottile sotto. A destra il modo della sezione (L C R sull'imager).
+- La scheda del sequencer si chiama SEQ.
+- S&H e Smooth Rnd mostrano i valori casuali reali generati dall'LFO, che scorrono nel tempo, invece di una forma fissa; anche le anteprime sulle schede.
+- L'etichetta MOD MATRIX ha la stessa targa e la stessa ombra del tasto FREEZE.
+- FREEZE più in alto: tra la sua ombra e la linea del titolo resta la stessa distanza che c'è tra le scritte e la linea.
+
 ## [0.2.4] - 2026-11-03
 - Interfaccia molto più fluida: lo sfondo e i controlli fermi vengono conservati in immagine invece di essere ridisegnati a ogni fotogramma. Nelle misure il tempo di disegno scende da 100-180 ms a meno di 10 ms per fotogramma.
 - Forma d'onda, scope e schede LFO si aggiornano solo quando hanno qualcosa di nuovo da mostrare; senza audio non si ridisegnano.

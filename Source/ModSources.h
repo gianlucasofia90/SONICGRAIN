@@ -29,7 +29,14 @@ public:
     static inline const char* kShapeNames[NumShapes] = { "Sine", "Triangle", "Saw Up", "Saw Down", "Square", "S&H",
                                                          "Smooth Rnd" };
 
-    explicit Lfo (uint32_t seed = 1) { rng.s ^= seed * 2654435761u; target = rng.nextPM(); prev = rng.nextPM(); }
+    static constexpr int kHistory = 8;   // random levels kept for the display, newest first
+
+    explicit Lfo (uint32_t seed = 1)
+    {
+        rng.s ^= seed * 2654435761u;
+        for (auto& h : hist) h = rng.nextPM();
+        target = hist[0]; prev = hist[1];
+    }
 
     /** value (-1..1) at the start of a chunk, then advances by `samples`. */
     float tick (int shape, bool sync, int div, float rateHz, double ppq, int samples, double sr)
@@ -51,7 +58,13 @@ public:
             freeCycle += (long long) w;
             phase -= w;
         }
-        if (cyc != lastCycle) { prev = target; target = rng.nextPM(); lastCycle = cyc; }
+        if (cyc != lastCycle)
+        {
+            prev = target; target = rng.nextPM(); lastCycle = cyc;
+            for (int i = kHistory - 1; i > 0; --i) hist[(size_t) i] = hist[(size_t) i - 1];
+            hist[0] = target;
+            ++steps;
+        }
         lastPhase = (float) ph;
         const float p = (float) ph;
         switch (shape)
@@ -67,12 +80,18 @@ public:
         }
     }
     float getPhase() const { return lastPhase; }
+    /** Random level of the cycle `ago` cycles back (0 = the current one): S&H holds it, Smooth Rnd glides to it. */
+    float getHistory (int ago) const { return hist[(size_t) (ago < 0 ? 0 : (ago >= kHistory ? kHistory - 1 : ago))]; }
+    /** Counts new random levels, so a display knows when the history moved. */
+    uint32_t getSteps() const { return steps; }
 
 private:
     Rng rng;
     double phase = 0;
     long long freeCycle = 0, lastCycle = LLONG_MIN;
     float prev = 0, target = 0, lastPhase = 0;
+    std::array<float, kHistory> hist {};
+    uint32_t steps = 0;
 };
 
 /** Metropolix-style sequencer: 8 stages, pulse count per stage, gate modes, ratchets, slide, probability,

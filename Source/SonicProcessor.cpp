@@ -258,7 +258,12 @@ void SonicProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiB
         }
         if (off == 0)
         {
-            for (int i = 0; i < kNumLfos; ++i) { ui.lfo[i].store (srcVal[kLfoSrc[i]]); ui.lfoPhase[i].store (lfo[i].getPhase()); }
+            for (int i = 0; i < kNumLfos; ++i)
+            {
+                ui.lfo[i].store (srcVal[kLfoSrc[i]]); ui.lfoPhase[i].store (lfo[i].getPhase());
+                for (int h = 0; h < Lfo::kHistory; ++h) ui.lfoHist[(size_t) i][(size_t) h].store (lfo[i].getHistory (h), std::memory_order_relaxed);
+                ui.lfoSteps[(size_t) i].store (lfo[i].getSteps(), std::memory_order_release);
+            }
             ui.seqVal.store (srcVal[3]); ui.seqGate.store (srcVal[4]); ui.seqStage.store (seq.getStage());
             ui.pos.store (gp.gpos); ui.size.store (gp.gsize); ui.spray.store (gp.spray); ui.pitch.store (gp.gpitch);
             ui.modMask.store (modMask);

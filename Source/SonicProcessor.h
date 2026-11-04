@@ -62,6 +62,9 @@ public:
     {
         std::atomic<float> lfo[sonic::kNumLfos] { 0.0f, 0.0f, 0.0f, 0.0f };
         std::atomic<float> lfoPhase[sonic::kNumLfos] { 0.0f, 0.0f, 0.0f, 0.0f };
+        // real random levels of each LFO (newest first) and a counter that moves when a new one starts
+        std::array<std::array<std::atomic<float>, sonic::Lfo::kHistory>, sonic::kNumLfos> lfoHist {};
+        std::array<std::atomic<juce::uint32>, sonic::kNumLfos> lfoSteps {};
         std::atomic<float> seqVal { 0 }, seqGate { 0 };
         std::atomic<int> seqStage { 0 };
         std::atomic<float> pos { 15 }, size { 120 }, spray { 20 }, pitch { 0 }, bpm { 120 }, corr { 1 };

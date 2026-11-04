@@ -5,11 +5,11 @@ Effetto audio granulare, glitch, tape e modulazione, in formato **VST3 / AU / AA
 ![SONIC GRAIN 0.2.1: pagina LFO 1](docs/screenshot.png)
 
 ## Interfaccia
-Dalla 0.2.1: pannelli in vetro su fondo blu, targhe nere inclinate, potenziometri scuri con arco giallo per il valore e valori in carattere pixel. In basso un'area a schede mostra una pagina alla volta (LFO 1–4 o METRO SEQ); la mod matrix resta sempre visibile a destra. Dalla 0.2.2 la finestra si ridimensiona dall'angolo in basso a destra (da 800×500 a 2560×1600, sempre 16:10) e resta nitida a qualunque scala.
+Dalla 0.2.1: pannelli in vetro su fondo blu, targhe nere inclinate, potenziometri scuri con arco giallo per il valore e valori in carattere pixel. In basso un'area a schede mostra una pagina alla volta (LFO 1–4 o SEQ); la mod matrix resta sempre visibile a destra. Dalla 0.2.2 la finestra si ridimensiona dall'angolo in basso a destra (da 800×500 a 2560×1600, sempre 16:10) e resta nitida a qualunque scala.
 
-| METRO SEQ | Mod matrix |
+| SEQ | Mod matrix |
 |---|---|
-| ![Pagina METRO SEQ](docs/screenshot-seq.png) | ![Mod matrix a 8 slot](docs/detail-matrix.png) |
+| ![Pagina SEQ](docs/screenshot-seq.png) | ![Mod matrix a 8 slot](docs/detail-matrix.png) |
 
 ![Modulazione dal vivo sui potenziometri](docs/detail-knobs.png)
 
@@ -21,9 +21,9 @@ Modulazione dal vivo: su Pitch la lancetta segue il valore modulato, l'arco verd
 - **Filter**: HPF 20 Hz – 2 kHz + Q, LPF 200 Hz – 20 kHz + Reso (SVF 12 dB/oct).
 - **Colour**: Bits, Downsample, Tone, Wow, Flutter, Drive, Dry/Wet, Output.
 - **Imager**: Width 0–200 % (M/S) e Bass Mono, spettroscopio polare **L C R** con barra di correlazione.
-- **Sync**: DAW (segue il playhead dell'host) o FREE (BPM interno 40–240).
-- **4 LFO**: 7 forme, sync a divisioni (8 bar … 1/16T) o 0.02–20 Hz.
-- **METRO SEQ**, ispirato a Intellijel Metropolix: 8 stadi con valore, pulse, ratchet, gate (MULTI / HOLD / SINGLE / REST), slide e probabilità. Direzioni Forward, Reverse, Pendulum, Random e Brownian.
+- **Sync**: DAW (segue il playhead dell'host) o FREE (BPM interno 40–240, si trascina il numero nella finestra TEMPO).
+- **4 LFO**: 7 forme (S&H e Smooth Rnd mostrano i valori casuali reali, che scorrono), sync a divisioni (8 bar … 1/16T) o 0.02–20 Hz.
+- **SEQ**, sequencer ispirato a Intellijel Metropolix: 8 stadi con valore, pulse, ratchet, gate (MULTI / HOLD / SINGLE / REST), slide e probabilità. Direzioni Forward, Reverse, Pendulum, Random e Brownian.
 - **Mod matrix** a 8 slot: LFO 1–4, SEQ e SEQ Gate verso 25 destinazioni, amount ±100 %. Potenziometri e valori numerici delle destinazioni seguono la modulazione in tempo reale: l'arco verde mostra l'escursione (giallo nell'area di modulazione), la tacca il valore impostato. Il parametro salvato non cambia e tenendo premuto il potenziometro si vede il valore impostato.
 - **Preset**: 8 di fabbrica (anche come program dell'host) più preset utente in `~/Music/Sonic Grain Presets/*.sgpreset`.
 

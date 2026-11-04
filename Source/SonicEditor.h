@@ -65,14 +65,16 @@ public:
             return ctl;
         };
         // header
-        for (auto* id : { "syncmode", "freebpm", "outdb" })
+        // header: SYNC + TEMPO share one dark window, OUTPUT has its own
+        for (auto* id : { "syncmode", "outdb" })
         {
             const juce::String s (id);
-            auto* ctl = add (id, s == "syncmode" ? "SYNC" : (s == "freebpm" ? "BPM" : "OUTPUT"), s == "syncmode" ? K::Menu : K::Box);
+            auto* ctl = add (id, s == "syncmode" ? "SYNC" : "OUTPUT", s == "syncmode" ? K::Menu : K::Box);
             ctl->getProperties().set ("sgDark", true);
             ctl->setCaptionColour (c::onPlate);
-            ctl->setCaptionJustification (juce::Justification::centred);
+            ctl->setCaptionJustification (s == "syncmode" ? juce::Justification::centredLeft : juce::Justification::centred);
         }
+        addAndMakeVisible (tempo);
         // grains
         for (auto pr : { std::pair<const char*, const char*> { "gpos", "Position" }, { "gsize", "Size" },
                           { "gdens", "Density" }, { "gpitch", "Pitch" }, { "spray", "Spray" }, { "prand", "Pitch Rnd" },
@@ -136,21 +138,17 @@ public:
         // modulation deck tabs
         for (int t = 0; t < kNumTabs; ++t)
         {
-            auto* tab = tabs.add (new ModTab (t < kNumLfos ? "LFO " + juce::String (t + 1) : juce::String ("Metro Seq")));
+            auto* tab = tabs.add (new ModTab (t < kNumLfos ? "LFO " + juce::String (t + 1) : juce::String ("SEQ")));
             if (t < kNumLfos)
             {
-                tab->thumbState = [this, t] { return (int) proc.state.getRawParameterValue ("lfo" + juce::String (t + 1) + "_shape")->load(); };
-                tab->drawThumb = [this, t] (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour col) {
+                tab->thumbState = [this, t] {
                     const int shape = (int) proc.state.getRawParameterValue ("lfo" + juce::String (t + 1) + "_shape")->load();
-                    juce::Path path;
-                    for (int i = 0; i <= 40; ++i)
-                    {
-                        const float q = (float) i / 40.0f;
-                        const juce::Point<float> pt (r.getX() + q * r.getWidth(), r.getCentreY() - 0.5f * r.getHeight() * lfoShapeValue (shape, q));
-                        if (i == 0) path.startNewSubPath (pt); else path.lineTo (pt);
-                    }
-                    g.setColour (col);
-                    g.strokePath (path, juce::PathStrokeType (1.5f));
+                    if (! isRandomLfoShape (shape)) return shape;
+                    // the real random output scrolls: redraw when it moves by a step of the drawing
+                    return shape + 16 * (int) (proc.ui.lfoSteps[(size_t) t].load() * 24u + (juce::uint32) (proc.ui.lfoPhase[t].load() * 24.0f));
+                };
+                tab->drawThumb = [this, t] (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour col) {
+                    traceLfo (g, proc, t, r, 3, 1.5f, col);
                 };
             }
             else
@@ -232,16 +230,13 @@ public:
         g.setColour (c::signal);  g.drawText (name, wm.translated (3, 3), juce::Justification::centredLeft);
         g.setColour (c::onPlate); g.drawText (name, wm, juce::Justification::centredLeft);
         taggedPlate (g, presetPlate.toFloat(), c::tag);
-        for (auto* id : { "syncmode", "freebpm", "outdb" })
-            if (auto* ctl = byId[id]; ctl != nullptr && ctl->isVisible())
-            {
-                auto b = headerPlate (ctl->getBounds()).toFloat();
-                g.setColour (juce::Colour (0x59000000)); g.fillPath (platePath (b), juce::AffineTransform::translation (3, 3));
-                g.setColour (c::plate); g.fillPath (platePath (b));
-            }
+        headerWindow (g, syncWindow.toFloat());
+        g.setColour (c::onPlate.withAlpha (0.2f));
+        g.fillRect (tempo.getX() - 8, syncWindow.getY() + 8, 1, syncWindow.getHeight() - 16);
+        headerWindow (g, outWindow.toFloat());
 
         glassPanel (g, grains.toFloat(), "Grain", "Cloud");
-        glassPanel (g, imager.toFloat(), "Stereo", "Imager");
+        glassPanel (g, imager.toFloat(), "Stereo", "Imager", "L C R");
         glassPanel (g, filter.toFloat(), "Tone", "Filter");
         glassPanel (g, glitch.toFloat(), "Time", "Glitch");
         glassPanel (g, colour.toFloat(), "Tape", "Colour");
@@ -250,7 +245,8 @@ public:
         {
             const auto f = black (12.0f, 0.04f);
             auto r = juce::Rectangle<float> ((float) matrixX, (float) tabsY, (float) tabW - 8, (float) tabH - 8);
-            taggedPlate (g, r, c::plate);
+            g.setColour (juce::Colour (0x59000000)); g.fillPath (platePath (r), juce::AffineTransform::translation (3, 3));   // like FREEZE
+            g.setColour (c::plate); g.fillPath (platePath (r));
             g.setColour (c::onPlate); g.setFont (f);
             g.drawText ("MOD MATRIX", r, juce::Justification::centred, false);
         }
@@ -312,23 +308,21 @@ public:
         nextBtn.setBounds (presetPlate.getRight() + 10, cy - 15, 40, 30);
         saveBtn.setBounds (nextBtn.getRight() + 6, cy - 15, 76, 30);
         delBtn.setBounds (saveBtn.getRight() + 2, cy - 15, 64, 30);
-        // right-aligned plates, 8 px apart; each control sits clear of its plate's slanted edges
-        int right = W - M;
-        for (auto [id, w] : { std::pair<const char*, int> { "outdb", 84 }, { "freebpm", 64 }, { "syncmode", 80 } })
-        {
-            if (juce::String (id) == "freebpm" && ! freeBpmShown) continue;   // SYNC moves next to OUTPUT
-            auto r = juce::Rectangle<int> (0, cy - 17, w, 34);
-            r.setX (right - headerPlate (r).getWidth() + (r.getX() - headerPlate (r).getX()));
-            at (id, r);
-            right = headerPlate (r).getX() - 8;
-        }
+        // right-aligned dark windows, G apart
+        // SYNC | TEMPO at the right edge, where the other plugins of the family have it; OUTPUT to its left
+        syncWindow = { W - M - 236, cy - 22, 236, 44 };
+        outWindow = { syncWindow.getX() - G - 120, cy - 22, 120, 44 };
+        at ("outdb", outWindow.reduced (10, 4));
+        at ("syncmode", { syncWindow.getX() + 10, syncWindow.getY() + 4, 84, 36 });
+        tempo.setBounds (syncWindow.getX() + 112, syncWindow.getY() + 4, syncWindow.getRight() - 10 - (syncWindow.getX() + 112), 36);
         // grains
         auto gc = content (grains);
         wave.setBounds (gc.removeFromTop (gc.getHeight() - KnobH - 8));
         gc.removeFromTop (8);
         const char* g[11] = { "gpos", "gsize", "gdens", "gpitch", "spray", "prand", "grev", "gshape", "gwidth", "feedback", "cloud" };
         for (int i = 0; i < 11; ++i) at (g[i], cell (gc, i, 11));
-        at ("freeze", { grains.getRight() - M - 118, grains.getY() + 22, 118, 30 });
+        // its shadow ends 8 px above the hairline, the same gap the title text leaves
+        at ("freeze", { grains.getRight() - M - 112, grains.getY() + 13, 112, 27 });
         // imager
         auto ic = content (imager);
         scope.setBounds (ic.removeFromTop (ic.getHeight() - KnobH - 8));
@@ -435,13 +429,6 @@ private:
     static constexpr int kSeqLabelX = grid::M + 140 + grid::M;   // after the sequencer's settings column
     static constexpr int kSeqX = kSeqLabelX + 44;
 
-    /** A header plate: the control's box widened so the slanted edges clear it on both sides. */
-    static juce::Rectangle<int> headerPlate (juce::Rectangle<int> ctl)
-    {
-        const int h = ctl.getHeight() + 10, lean = juce::roundToInt ((float) h * 0.577f);
-        return ctl.expanded (lean + 6, 5);
-    }
-
     /** Column of sequencer stage s, spread evenly between the row labels and the page edge. */
     static juce::Rectangle<int> seqStage (int s)
     {
@@ -472,12 +459,6 @@ private:
 
     void updateVisibility()
     {
-        auto v = [this] (const char* id) { return proc.state.getRawParameterValue (id)->load() > 0.5f; };
-        if (auto* c = byId["freebpm"])
-        {
-            c->setVisible (v ("syncmode"));
-            if (freeBpmShown != c->isVisible()) { freeBpmShown = c->isVisible(); resized(); backdrop.repaint(); }
-        }
         const int tab = activeTab();
         for (int i = 1; i <= kNumLfos; ++i)
         {
@@ -523,13 +504,14 @@ private:
     juce::OwnedArray<ModTab> tabs;
     juce::TextButton prevBtn, nextBtn, saveBtn, delBtn;
     juce::ComboBox presetBox;
-    juce::Rectangle<int> presetPlate;
+    juce::Rectangle<int> presetPlate, syncWindow, outWindow;
+    TempoBox tempo { proc };
     juce::OwnedArray<Control> controls;
     juce::HashMap<juce::String, Control*> byId;
     std::array<Control*, kNumDests> destControls {};
     juce::uint32 lastBlockCount = 0;
     int idleFrames = 0, slowTick = 0;
-    bool addingDeck = false, freeBpmShown = false;
+    bool addingDeck = false;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SonicView)
 };
 } // namespace sonic

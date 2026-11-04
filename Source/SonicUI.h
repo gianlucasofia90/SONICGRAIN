@@ -79,8 +79,10 @@ inline void taggedPlate (juce::Graphics& g, juce::Rectangle<float> r, juce::Colo
     g.setColour (fill);      g.fillPath (platePath (r));
 }
 
-/** Glass panel with its two-line title: kicker word, then the section word on a tagged plate. */
-inline void glassPanel (juce::Graphics& g, juce::Rectangle<float> r, const juce::String& kicker, const juce::String& title)
+/** Glass panel with its two-line title: a light kicker word over the bold section word, both widely tracked
+    and left-aligned, an optional mode word right-aligned on the section line, and a hairline under them. */
+inline void glassPanel (juce::Graphics& g, juce::Rectangle<float> r, const juce::String& kicker, const juce::String& title,
+                        const juce::String& mode = {})
 {
     juce::Path body;
     body.addRoundedRectangle (r, 10.0f);
@@ -90,16 +92,31 @@ inline void glassPanel (juce::Graphics& g, juce::Rectangle<float> r, const juce:
     g.setColour (c::glassEdge);
     g.strokePath (body, juce::PathStrokeType (1.0f));
 
+    const auto text = r.reduced (16.0f, 0.0f);
     g.setColour (c::inkSoft);
-    g.setFont (medium (10.0f, 0.3f));
-    g.drawText (kicker.toUpperCase(), (int) r.getX() + 16, (int) r.getY() + 12, 200, 12, juce::Justification::left);
-    const auto f = bold (13.0f, 0.22f);
-    const float tw = juce::GlyphArrangement::getStringWidth (f, title.toUpperCase()) + 36.0f;
-    auto tr = juce::Rectangle<float> (r.getX() + 16, r.getY() + 26, tw, 22);   // shadow ends 7 px lower, content starts at +56
-    taggedPlate (g, tr, c::plate);
-    g.setColour (c::onPlate);
-    g.setFont (f);
-    g.drawText (title.toUpperCase(), tr.reduced (14, 0), juce::Justification::centred);
+    g.setFont (medium (12.0f, 0.42f));
+    g.drawText (kicker.toUpperCase(), text.withY (r.getY() + 12).withHeight (14), juce::Justification::centredLeft, false);
+    const auto line2 = text.withY (r.getY() + 28).withHeight (16);
+    g.setColour (c::ink);
+    g.setFont (bold (14.0f, 0.36f));
+    g.drawText (title.toUpperCase(), line2, juce::Justification::centredLeft, false);
+    if (mode.isNotEmpty())
+    {
+        g.setColour (c::inkSoft);
+        g.setFont (medium (12.0f, 0.12f));
+        g.drawText (mode.toUpperCase(), line2, juce::Justification::centredRight, false);
+    }
+    g.setColour (c::inkSoft.withAlpha (0.45f));
+    g.fillRect (text.getX(), r.getY() + 48.0f, text.getWidth(), 1.0f);   // content starts at +56
+}
+
+/** Dark window of the header (SYNC / TEMPO, OUTPUT): the same box the other plugins of the family use. */
+inline void headerWindow (juce::Graphics& g, juce::Rectangle<float> r)
+{
+    g.setColour (c::plate);
+    g.fillRoundedRectangle (r, 5.0f);
+    g.setColour (c::accent.withAlpha (0.55f));
+    g.drawRoundedRectangle (r.reduced (0.75f), 5.0f, 1.5f);
 }
 
 /** The shape of LFO shape index s at phase p, -1..1 (drawing only). */
@@ -280,6 +297,7 @@ public:
     void drawLinearSlider (juce::Graphics& g, int x, int y, int w, int h, float pos, float, float,
                            juce::Slider::SliderStyle style, juce::Slider& s) override
     {
+        if (s.getProperties()["sgInvisible"]) return;   // drawn by its owner (tempo box)
         auto r = juce::Rectangle<float> ((float) x, (float) y, (float) w, (float) h);
         const bool dark = isOnDark (s);
         g.setColour (dark ? c::trackDark : c::track);
@@ -697,7 +715,61 @@ private:
     std::array<Sm, 96> smooth {};
 };
 
-/** LFO display: the shape drawn once across the well, with a dot riding it at the current phase. */
+inline bool isRandomLfoShape (int shape) { return shape == Lfo::SampleHold || shape == Lfo::SmoothRandom; }
+
+/** The LFO's output drawn in r. Periodic shapes: one cycle with the current phase. S&H and Smooth Rnd: the real
+    random levels the LFO produced over the last `cycles` cycles, scrolling, with "now" at the right edge.
+    Returns where "now" is. */
+inline juce::Point<float> traceLfo (juce::Graphics& g, const SonicProcessor& proc, int idx, juce::Rectangle<float> r,
+                                    int cycles, float lineWidth, juce::Colour col)
+{
+    const int shape = (int) proc.state.getRawParameterValue ("lfo" + juce::String (idx + 1) + "_shape")->load();
+    const float ph = proc.ui.lfoPhase[idx].load();
+    auto yOf = [&] (float v) { return r.getY() + (0.5f - 0.5f * juce::jlimit (-1.0f, 1.0f, v)) * r.getHeight(); };
+    juce::Path path;
+    juce::Point<float> now;
+    if (! isRandomLfoShape (shape))
+    {
+        for (int i = 0; i <= 160; ++i)
+        {
+            const float p = (float) i / 160.0f;
+            const juce::Point<float> pt (r.getX() + p * r.getWidth(), yOf (lfoShapeValue (shape, p)));
+            if (i == 0) path.startNewSubPath (pt); else path.lineTo (pt);
+        }
+        now = { r.getX() + ph * r.getWidth(), yOf (proc.ui.lfo[idx].load()) };
+    }
+    else
+    {
+        const auto& hist = proc.ui.lfoHist[(size_t) idx];
+        auto level = [&] (int ago) { return hist[(size_t) juce::jlimit (0, Lfo::kHistory - 1, ago)].load (std::memory_order_relaxed); };
+        auto xOf = [&] (float ago) { return r.getRight() - ago / (float) cycles * r.getWidth(); };
+        bool started = false;
+        // cycle j started ph + j cycles ago; q is how far into it (0..1, or 0..ph for the current one)
+        for (int j = juce::jmin (cycles, Lfo::kHistory - 2); j >= 0; --j)
+        {
+            const float qStart = juce::jmax (0.0f, ph + (float) j - (float) cycles), qEnd = j == 0 ? ph : 1.0f;
+            if (qEnd < qStart) continue;
+            const float from = level (j + 1), to = level (j);
+            const int n = shape == Lfo::SampleHold ? 1 : juce::jmax (2, (int) (32.0f * (qEnd - qStart)));
+            for (int k = 0; k <= n; ++k)
+            {
+                const float q = qStart + (qEnd - qStart) * (float) k / (float) n;
+                const float v = shape == Lfo::SampleHold ? to : from + (to - from) * (0.5f - 0.5f * std::cos (3.14159265f * q));
+                const juce::Point<float> pt (xOf (ph + (float) j - q), yOf (v));
+                if (! started) { path.startNewSubPath (pt); started = true; }
+                else if (k == 0 && shape == Lfo::SampleHold) { path.lineTo (pt.x, yOf (from)); path.lineTo (pt); }
+                else path.lineTo (pt);
+            }
+        }
+        now = { r.getRight(), yOf (level (0)) };
+        if (shape == Lfo::SmoothRandom) now.y = yOf (proc.ui.lfo[idx].load());
+    }
+    g.setColour (col);
+    g.strokePath (path, juce::PathStrokeType (lineWidth, juce::PathStrokeType::mitered, juce::PathStrokeType::rounded));
+    return now;
+}
+
+/** LFO display: the shape (or, for S&H and Smooth Rnd, the real random output) with a dot at "now". */
 class LfoView : public juce::Component, private juce::Timer
 {
 public:
@@ -706,21 +778,10 @@ public:
     {
         auto r = getLocalBounds().toFloat();
         displayWell (g, r);
-        const int shape = (int) proc.state.getRawParameterValue ("lfo" + juce::String (idx + 1) + "_shape")->load();
-        const float W = r.getWidth() - 24, H = r.getHeight() - 24;
         g.setColour (c::grid);
         g.drawHorizontalLine ((int) r.getCentreY(), 8, r.getWidth() - 8);
-        juce::Path path;
-        for (int i = 0; i <= 160; ++i)
-        {
-            const float p = i / 160.0f;
-            const float x = 12 + p * W, y = 12 + (0.5f - 0.5f * lfoShapeValue (shape, p)) * H;
-            if (i == 0) path.startNewSubPath (x, y); else path.lineTo (x, y);
-        }
-        g.setColour (c::wave);
-        g.strokePath (path, juce::PathStrokeType (2.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-        const float ph = proc.ui.lfoPhase[idx].load(), v = proc.ui.lfo[idx].load();
-        auto dot = juce::Rectangle<float> (12, 12).withCentre ({ 12 + ph * W, 12 + (0.5f - 0.5f * v) * H });
+        const auto now = traceLfo (g, proc, idx, r.reduced (12.0f), 4, 2.5f, c::wave);
+        auto dot = juce::Rectangle<float> (12, 12).withCentre (now);
         g.setColour (c::accent);   g.fillEllipse (dot);
         g.setColour (c::onAccent); g.drawEllipse (dot, 1.5f);
     }
@@ -728,6 +789,52 @@ private:
     void timerCallback() override { if (isShowing()) repaint(); }
     SonicProcessor& proc;
     int idx;
+};
+
+/** SYNC window's TEMPO side: the tempo in use (the host's in DAW mode); in FREE mode drag it to change it. */
+class TempoBox : public juce::Component, private juce::Timer
+{
+public:
+    explicit TempoBox (SonicProcessor& p) : proc (p)
+    {
+        slider.setSliderStyle (juce::Slider::LinearBarVertical);
+        slider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
+        slider.getProperties().set ("sgInvisible", true);
+        slider.setTooltip ("Free BPM: drag, double-click for 120");
+        addAndMakeVisible (slider);
+        attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (p.state, "freebpm", slider);
+        slider.setDoubleClickReturnValue (true, 120.0);
+        startTimerHz (10);
+        timerCallback();
+    }
+    void resized() override { slider.setBounds (getLocalBounds()); }
+    void paint (juce::Graphics& g) override
+    {
+        auto r = getLocalBounds().toFloat();
+        g.setColour (c::onPlate);
+        g.setFont (bold (10.0f, 0.08f));
+        g.drawText ("TEMPO", r.withHeight (14).translated (0, 4), juce::Justification::centredLeft, false);
+        g.setColour (c::onPlate.withAlpha (0.55f));
+        g.setFont (medium (9.0f, 0.12f));
+        g.drawText (freeMode ? "BPM FREE" : "BPM DAW", r.withY (r.getY() + 22).withHeight (12), juce::Justification::centredLeft, false);
+        g.setColour (c::accent);
+        g.setFont (pixel (20.0f));
+        g.drawText (juce::String (shown, 1), r.withTrimmedLeft (54), juce::Justification::centredRight, false);
+    }
+private:
+    void timerCallback() override
+    {
+        const bool f = proc.state.getRawParameterValue ("syncmode")->load() > 0.5f;
+        const float v = f ? proc.state.getRawParameterValue ("freebpm")->load() : proc.ui.bpm.load();
+        slider.setEnabled (f);
+        slider.setInterceptsMouseClicks (f, f);
+        if (f != freeMode || std::abs (v - shown) > 0.04f) { freeMode = f; shown = v; repaint(); }
+    }
+    SonicProcessor& proc;
+    juce::Slider slider;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
+    bool freeMode = false;
+    float shown = 120.0f;
 };
 
 /** Tab of the modulation deck: a slanted plate with a name and a small live drawing of the source. */
