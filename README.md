@@ -31,7 +31,7 @@ Interfaccia 16:10 ridimensionabile (1280×800 di base): pannelli in vetro, LFO e
 
 ## Download
 Ogni tag `v*` pubblica una [Release](../../releases) con:
-- macOS: installer `.pkg` con VST3 e AU, oppure VST3, AU e AAX non firmato in zip (universal arm64 + x86_64, da macOS 11);
+- macOS: installer `.pkg` con VST3 e AU, oppure VST3, AU e AAX non firmato in zip (universal arm64 + x86_64, da macOS 10.13 High Sierra);
 - Windows: VST3;
 - Linux: VST3.
 
