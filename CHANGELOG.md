@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.2.7] - 2026-11-06
+- macOS: il plugin ora funziona anche sui Mac Intel con macOS 10.13 High Sierra o successivo, compreso Catalina. Prima richiedeva macOS 11: in Ableton Live il VST3 non compariva e l'AU compariva ma non si apriva. Sui Mac Apple Silicon non cambia nulla.
+
 ## [0.2.6] - 2026-11-04
 - Nuovo logo nell'header: un disco blu con grani che corrono in avanti dentro un anello sfumato arancio-menta, seguito dalla scritta SONIC GRAIN in Rubik Black Italic, senza più l'ombra rossa/verde.
 - I file del logo (icona, versioni mono, orizzontale, verticale, solo scritta; SVG e PNG) sono in `Resources/logo`.
